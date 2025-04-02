@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"reportdb/profiling"
 	"reportdb/src/datastore/query"
 	"reportdb/src/datastore/writer"
 	"reportdb/src/polling"
@@ -12,14 +11,14 @@ import (
 )
 
 func main() {
-	cpuProfileFile := profiling.StartCPUProfile()
+	//cpuProfileFile := profiling.StartCPUProfile()
 	//
-	defer profiling.StopCPUProfile(cpuProfileFile)
-
+	//defer profiling.StopCPUProfile(cpuProfileFile)
+	//
 	//defer profiling.WriteMemProfile()
-
+	//
 	//defer profiling.WriteGoroutineProfile()
-
+	//
 	//traceFile := profiling.StartTrace()
 	//
 	//defer profiling.StopTrace(traceFile)
