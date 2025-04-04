@@ -122,6 +122,22 @@ func (im *IndexManager) Save(day time.Time) error {
 	return nil
 }
 
+func (im *IndexManager) GetIndexMap(counterID uint16, objectID uint32) (*IndexEntry, error) {
+
+	im.mu.RLock()
+
+	defer im.mu.RUnlock()
+
+	data := im.indexMap[counterID][objectID]
+
+	if data == nil {
+
+		return nil, fmt.Errorf("no index map found for counter %d", counterID)
+	}
+
+	return data, nil
+}
+
 func (im *IndexManager) GetIndexHandle(counterID uint16) (*IndexHandle, error) {
 
 	if handle, exits := im.indexHandles[counterID]; exits {

@@ -2,11 +2,11 @@ package main
 
 import (
 	"log"
-	"reportdb/config"
-	"reportdb/src/datastore/reader"
-	"reportdb/src/datastore/writer"
-	"reportdb/src/polling"
-	"reportdb/src/storage/helper"
+	. "reportdb/config"
+	. "reportdb/src/datastore/reader"
+	. "reportdb/src/datastore/writer"
+	. "reportdb/src/polling"
+	. "reportdb/src/storage/helper"
 	"sync"
 	"time"
 )
@@ -15,17 +15,17 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	globalCfg := config.NewGlobalConfig()
+	globalCfg := NewGlobalConfig()
 
-	pollerCfg := polling.NewPollerEngine()
+	pollerCfg := NewPollerEngine()
 
 	pollCh := pollerCfg.PollData(globalCfg)
 
-	fileCfg := helper.NewFileManager(globalCfg.BaseDir)
+	fileCfg := NewFileManager(globalCfg.BaseDir)
 
-	indexCfg := helper.NewIndexManager(globalCfg.BaseDir)
+	indexCfg := NewIndexManager(globalCfg.BaseDir)
 
-	writePool := writer.NewWriterPool(pollCh, globalCfg.WriterCount)
+	writePool := NewWriterPool(pollCh, globalCfg.WriterCount)
 
 	writePool.StartWriter(globalCfg.WriterCount, fileCfg, indexCfg, globalCfg.BaseDir, &wg)
 
@@ -33,7 +33,7 @@ func main() {
 
 	wg.Add(1)
 
-	go func(indexCfg *helper.IndexManager) {
+	go func(indexCfg *IndexManager) {
 
 		defer wg.Done()
 
@@ -70,7 +70,7 @@ func main() {
 
 	// parallel reader
 
-	reader := reader.NewReader(&wg, globalCfg.BaseDir)
+	reader := NewReader(&wg, globalCfg.BaseDir)
 
 	reader.StartReader(globalCfg.ReaderCount, fileCfg, indexCfg)
 

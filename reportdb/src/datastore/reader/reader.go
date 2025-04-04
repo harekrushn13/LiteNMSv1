@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reportdb/config"
-	"reportdb/src/storage/engine"
+	"reportdb/src/storage"
 	"reportdb/src/storage/helper"
 	"strconv"
 	"sync"
@@ -67,13 +67,13 @@ func (r *Reader) StartReader(readerCount uint8, fileCfg *helper.FileManager, ind
 
 		r.wg.Add(1)
 
-		go runQuery(r.wg, r.BaseDir, fileCfg, indexCfg)
+		go r.runQuery(fileCfg, indexCfg)
 	}
 }
 
-func runQuery(wg *sync.WaitGroup, baseDir string, fileCfg *helper.FileManager, indexCfg *helper.IndexManager) {
+func (r *Reader) runQuery(fileCfg *helper.FileManager, indexCfg *helper.IndexManager) {
 
-	defer wg.Done()
+	defer r.wg.Done()
 
 	t := time.NewTicker(1 * time.Second)
 
@@ -90,9 +90,10 @@ func runQuery(wg *sync.WaitGroup, baseDir string, fileCfg *helper.FileManager, i
 
 		case <-t.C:
 
-			query := NewQuery(3, 3, 1743569072, uint32(to)+7, fileCfg, indexCfg)
+			//query := NewQuery(3, 3, 1743569072, uint32(to)+7, fileCfg, indexCfg)
+			query := NewQuery(3, 3, uint32(to), uint32(to)+7, fileCfg, indexCfg)
 
-			v, err := query.fetchData(baseDir)
+			v, err := query.fetchData(r.BaseDir)
 
 			if err != nil {
 
@@ -111,17 +112,45 @@ func runQuery(wg *sync.WaitGroup, baseDir string, fileCfg *helper.FileManager, i
 
 func (query *Query) fetchData(baseDir string) ([]interface{}, error) {
 
-	fromTime := time.Unix(int64(query.from), 0)
+	fromTime := time.Unix(int64(query.from), 0).Truncate(24 * time.Hour).UTC()
 
-	toTime := time.Unix(int64(query.to), 0)
+	toTime := time.Unix(int64(query.to), 0).Truncate(24 * time.Hour).UTC()
 
-	fromTime = time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(), 0, 0, 0, 0, fromTime.Location())
-
-	toTime = time.Date(toTime.Year(), toTime.Month(), toTime.Day(), 0, 0, 0, 0, toTime.Location())
+	today := time.Now().Truncate(24 * time.Hour).UTC()
 
 	var results []interface{}
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
+
+		if current.Equal(today) {
+
+			entry, err := query.indexCfg.GetIndexMap(query.counterID, query.objectID)
+
+			if err != nil {
+
+				return nil, err
+			}
+
+			validOffsets, err := getValidOffsets(entry, query.from, query.to)
+
+			if err != nil {
+
+				return nil, fmt.Errorf("failed to get valid offsets: %v", err)
+			}
+
+			store := storage.NewStorageEngine(query.fileCfg, query.indexCfg, baseDir)
+
+			dayResults, err := store.Get(query.counterID, query.objectID, current, validOffsets, config.CounterTypeMapping[query.counterID])
+
+			if err != nil {
+
+				return nil, fmt.Errorf("failed to fetch today's data: %v", err)
+			}
+
+			results = append(results, dayResults...)
+
+			continue
+		}
 
 		dayResults, err, skip := query.fetchDayData(baseDir, current)
 
@@ -178,7 +207,7 @@ func (query *Query) fetchDayData(baseDir string, day time.Time) ([]interface{}, 
 		return nil, fmt.Errorf("failed to get valid offsets: %v", err), false
 	}
 
-	store := engine.NewStorageEngine(query.fileCfg, query.indexCfg, baseDir)
+	store := storage.NewStorageEngine(query.fileCfg, query.indexCfg, baseDir)
 
 	dayResults, err := store.Get(query.counterID, query.objectID, day, validOffsets, dataType)
 

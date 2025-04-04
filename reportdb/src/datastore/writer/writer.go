@@ -2,31 +2,31 @@ package writer
 
 import (
 	"log"
-	"reportdb/config"
-	"reportdb/src/storage/engine"
-	"reportdb/src/storage/helper"
+	. "reportdb/config"
+	. "reportdb/src/storage"
+	. "reportdb/src/storage/helper"
 	"sync"
 )
 
 type WriterPool struct {
 	workers []*Writer
 
-	pollCh <-chan []config.RowData
+	pollCh <-chan []RowData
 
-	workerChannels []chan config.RowData
+	workerChannels []chan RowData
 }
 
 type Writer struct {
 	ID uint8
 
-	TaskQueue <-chan config.RowData
+	TaskQueue <-chan RowData
 
-	store *engine.StorageEngine
+	store *StorageEngine
 
 	wg *sync.WaitGroup
 }
 
-func NewWriterPool(ch <-chan []config.RowData, writerCount uint8) *WriterPool {
+func NewWriterPool(ch <-chan []RowData, writerCount uint8) *WriterPool {
 
 	return &WriterPool{
 
@@ -34,15 +34,15 @@ func NewWriterPool(ch <-chan []config.RowData, writerCount uint8) *WriterPool {
 
 		pollCh: ch,
 
-		workerChannels: make([]chan config.RowData, writerCount),
+		workerChannels: make([]chan RowData, writerCount),
 	}
 }
 
-func (wp *WriterPool) StartWriter(writerCount uint8, fileCfg *helper.FileManager, indexCfg *helper.IndexManager, baseDir string, wg *sync.WaitGroup) {
+func (wp *WriterPool) StartWriter(writerCount uint8, fileCfg *FileManager, indexCfg *IndexManager, baseDir string, wg *sync.WaitGroup) {
 
 	for i := uint8(0); i < writerCount; i++ {
 
-		wp.workerChannels[i] = make(chan config.RowData, 50)
+		wp.workerChannels[i] = make(chan RowData, 50)
 
 		wp.workers[i] = &Writer{
 
@@ -50,7 +50,7 @@ func (wp *WriterPool) StartWriter(writerCount uint8, fileCfg *helper.FileManager
 
 			TaskQueue: wp.workerChannels[i],
 
-			store: engine.NewStorageEngine(fileCfg, indexCfg, baseDir),
+			store: NewStorageEngine(fileCfg, indexCfg, baseDir),
 
 			wg: wg,
 		}
@@ -89,5 +89,6 @@ func (w *Writer) runWorker() {
 
 			log.Printf("Error writing row: %v", err)
 		}
+
 	}
 }
