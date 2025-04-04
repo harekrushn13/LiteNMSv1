@@ -1,7 +1,5 @@
 package config
 
-import "time"
-
 type RowData struct {
 	ObjectId uint32
 
@@ -11,11 +9,3 @@ type RowData struct {
 
 	Value interface{}
 }
-
-const (
-	PollingInterval time.Duration = 1 * time.Second
-
-	BatchTime time.Duration = 2500 * time.Millisecond
-
-	StopTime time.Duration = 10 * time.Second
-)

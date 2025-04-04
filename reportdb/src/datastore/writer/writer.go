@@ -4,62 +4,90 @@ import (
 	"log"
 	"reportdb/config"
 	"reportdb/src/storage/engine"
+	"reportdb/src/storage/helper"
 	"sync"
 )
 
-func StartWriter(pollCh <-chan []config.RowData, wg *sync.WaitGroup) {
+type WriterPool struct {
+	workers []*Writer
 
-	writerChannels := make([]chan config.RowData, config.WriterCount)
+	pollCh <-chan []config.RowData
 
-	for i := uint8(0); i < config.WriterCount; i++ {
+	workerChannels []chan config.RowData
+}
 
-		writerChannels[i] = make(chan config.RowData, 100)
+type Writer struct {
+	ID uint8
+
+	TaskQueue <-chan config.RowData
+
+	store *engine.StorageEngine
+
+	wg *sync.WaitGroup
+}
+
+func NewWriterPool(ch <-chan []config.RowData, writerCount uint8) *WriterPool {
+
+	return &WriterPool{
+
+		workers: make([]*Writer, writerCount),
+
+		pollCh: ch,
+
+		workerChannels: make([]chan config.RowData, writerCount),
+	}
+}
+
+func (wp *WriterPool) StartWriter(writerCount uint8, fileCfg *helper.FileManager, indexCfg *helper.IndexManager, baseDir string, wg *sync.WaitGroup) {
+
+	for i := uint8(0); i < writerCount; i++ {
+
+		wp.workerChannels[i] = make(chan config.RowData, 50)
+
+		wp.workers[i] = &Writer{
+
+			ID: i,
+
+			TaskQueue: wp.workerChannels[i],
+
+			store: engine.NewStorageEngine(fileCfg, indexCfg, baseDir),
+
+			wg: wg,
+		}
 
 		wg.Add(1)
 
-		go runWriter(writerChannels[i], wg)
+		go wp.workers[i].runWorker()
 	}
 
-	go func() {
+	go func(writerCount uint8) {
 
-		for batch := range pollCh {
+		for batch := range wp.pollCh {
 
 			for _, row := range batch {
 
-				writerIdx := uint8((uint32(row.CounterId) + row.ObjectId) % uint32(config.WriterCount))
+				writerIdx := uint8((uint32(row.CounterId) + row.ObjectId) % uint32(writerCount))
 
-				writerChannels[writerIdx] <- row
+				wp.workerChannels[writerIdx] <- row
 			}
 		}
 
-		for _, ch := range writerChannels {
+		for _, ch := range wp.workerChannels {
 
 			close(ch)
 		}
-	}()
+	}(writerCount)
 }
 
-func runWriter(ch <-chan config.RowData, wg *sync.WaitGroup) {
+func (w *Writer) runWorker() {
 
-	defer wg.Done()
+	defer w.wg.Done()
 
-	for row := range ch {
+	for row := range w.TaskQueue {
 
-		if err := writeRow(row); err != nil {
+		if err := w.store.Save(row); err != nil {
 
 			log.Printf("Error writing row: %v", err)
 		}
 	}
-}
-
-func writeRow(row config.RowData) error {
-
-	err := engine.Save(row)
-
-	if err != nil {
-
-		return err
-	}
-
-	return nil
 }

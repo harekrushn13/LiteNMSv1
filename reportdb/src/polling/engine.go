@@ -7,21 +7,40 @@ import (
 	"time"
 )
 
-func PollData() <-chan []config.RowData {
+type PollerEngine struct {
+	PollInterval time.Duration
+
+	BatchTime time.Duration
+
+	StopTime time.Duration
+}
+
+func NewPollerEngine() *PollerEngine {
+
+	return &PollerEngine{
+		PollInterval: 1 * time.Second,
+
+		BatchTime: 2500 * time.Millisecond,
+
+		StopTime: 10 * time.Second,
+	}
+}
+
+func (poller *PollerEngine) PollData(gobalCfg *config.GlobalConfig) <-chan []config.RowData {
 
 	out := make(chan []config.RowData)
 
 	go func() {
 
-		ticker := time.NewTicker(config.PollingInterval)
+		ticker := time.NewTicker(poller.PollInterval)
 
 		defer ticker.Stop()
 
-		batchTicker := time.NewTicker(config.BatchTime)
+		batchTicker := time.NewTicker(poller.BatchTime)
 
 		defer batchTicker.Stop()
 
-		stopTimer := time.NewTimer(config.StopTime)
+		stopTimer := time.NewTimer(poller.StopTime)
 
 		defer stopTimer.Stop()
 
@@ -35,9 +54,9 @@ func PollData() <-chan []config.RowData {
 
 				t := time.Now().Unix()
 
-				for objectID := uint32(1); objectID <= config.ObjectCount; objectID++ {
+				for objectID := uint32(1); objectID <= gobalCfg.ObjectCount; objectID++ {
 
-					for counterID := uint16(1); counterID <= config.CounterCount; counterID++ {
+					for counterID := uint16(1); counterID <= gobalCfg.CounterCount; counterID++ {
 
 						var value interface{}
 

@@ -2,38 +2,38 @@ package main
 
 import (
 	"log"
-	"reportdb/src/datastore/query"
+	"reportdb/config"
+	"reportdb/src/datastore/reader"
 	"reportdb/src/datastore/writer"
 	"reportdb/src/polling"
-	"reportdb/src/utils"
+	"reportdb/src/storage/helper"
 	"sync"
 	"time"
 )
 
 func main() {
-	//cpuProfileFile := profiling.StartCPUProfile()
-	//
-	//defer profiling.StopCPUProfile(cpuProfileFile)
-	//
-	//defer profiling.WriteMemProfile()
-	//
-	//defer profiling.WriteGoroutineProfile()
-	//
-	//traceFile := profiling.StartTrace()
-	//
-	//defer profiling.StopTrace(traceFile)
-
-	pollCh := polling.PollData()
 
 	var wg sync.WaitGroup
 
-	writer.StartWriter(pollCh, &wg)
+	globalCfg := config.NewGlobalConfig()
+
+	pollerCfg := polling.NewPollerEngine()
+
+	pollCh := pollerCfg.PollData(globalCfg)
+
+	fileCfg := helper.NewFileManager(globalCfg.BaseDir)
+
+	indexCfg := helper.NewIndexManager(globalCfg.BaseDir)
+
+	writePool := writer.NewWriterPool(pollCh, globalCfg.WriterCount)
+
+	writePool.StartWriter(globalCfg.WriterCount, fileCfg, indexCfg, globalCfg.BaseDir, &wg)
 
 	// save Index at specific Interval
 
 	wg.Add(1)
 
-	go func() {
+	go func(indexCfg *helper.IndexManager) {
 
 		defer wg.Done()
 
@@ -51,14 +51,14 @@ func main() {
 
 			case <-t.C:
 
-				if err := utils.SaveIndex(time.Now()); err != nil {
+				if err := indexCfg.Save(time.Now()); err != nil {
 
 					log.Fatal(err)
 				}
 
 			case <-stopTimer.C:
 
-				if err := utils.SaveIndex(time.Now()); err != nil {
+				if err := indexCfg.Save(time.Now()); err != nil {
 
 					log.Fatal(err)
 				}
@@ -66,20 +66,13 @@ func main() {
 				return
 			}
 		}
-	}()
+	}(indexCfg)
 
 	// parallel reader
 
-	func() {
+	reader := reader.NewReader(&wg, globalCfg.BaseDir)
 
-		for i := 0; i < 3; i++ {
-
-			wg.Add(1)
-
-			go query.RunQuery(&wg)
-		}
-
-	}()
+	reader.StartReader(globalCfg.ReaderCount, fileCfg, indexCfg)
 
 	wg.Wait()
 }
