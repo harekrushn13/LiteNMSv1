@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
-	"time"
 )
 
 type IndexEntry struct {
@@ -18,51 +16,33 @@ type IndexEntry struct {
 	Offsets []int64 `json:"offsets"`
 }
 
-type IndexHandle struct {
-	Lock *sync.RWMutex
-}
-
 type IndexManager struct {
-	indexMap map[uint16]map[uint32]*IndexEntry // IndexMap[counterID][objectID]
+	indexMap map[uint32]*IndexEntry // IndexMap[objectID]
 
-	indexHandles map[uint16]*IndexHandle // IndexHandles[counterID]
+	mu *sync.RWMutex
 
-	mu sync.RWMutex
-
-	BaseDir string
+	BaseDir string // ./src/storage/database/YYYY/MM/DD/counter_1
 }
 
 func NewIndexManager(baseDir string) *IndexManager {
 
 	return &IndexManager{
 
-		indexMap: make(map[uint16]map[uint32]*IndexEntry),
+		indexMap: make(map[uint32]*IndexEntry),
 
-		indexHandles: make(map[uint16]*IndexHandle),
-
-		mu: sync.RWMutex{},
+		mu: &sync.RWMutex{},
 
 		BaseDir: baseDir,
 	}
 }
 
-func (im *IndexManager) Update(counterID uint16, objectID uint32, offset int64, timestamp uint32) {
+func (im *IndexManager) Update(objectID uint32, offset int64, timestamp uint32) {
 
 	im.mu.Lock()
 
 	defer im.mu.Unlock()
 
-	if _, exists := im.indexMap[counterID]; !exists {
-
-		im.indexMap[counterID] = make(map[uint32]*IndexEntry)
-
-		im.indexHandles[counterID] = &IndexHandle{
-
-			Lock: &sync.RWMutex{},
-		}
-	}
-
-	entry, exists := im.indexMap[counterID][objectID]
+	entry, exists := im.indexMap[objectID]
 
 	if exists {
 
@@ -72,7 +52,7 @@ func (im *IndexManager) Update(counterID uint16, objectID uint32, offset int64, 
 
 	} else {
 
-		im.indexMap[counterID][objectID] = &IndexEntry{
+		im.indexMap[objectID] = &IndexEntry{
 
 			StartTime: timestamp,
 
@@ -83,82 +63,66 @@ func (im *IndexManager) Update(counterID uint16, objectID uint32, offset int64, 
 	}
 }
 
-func (im *IndexManager) Save(day time.Time) error {
+func (im *IndexManager) Save() error {
 
 	im.mu.Lock()
 
 	defer im.mu.Unlock()
 
-	for counterID, counterIndex := range im.indexMap {
+	indexFilePath := im.BaseDir + "/index.json"
 
-		indexFilePath := im.GetIndexFilePath(counterID, day)
+	if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
 
-		if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
+		return err
+	}
 
-			return err
-		}
+	data, err := json.MarshalIndent(im.indexMap, "", "  ")
 
-		data, err := json.MarshalIndent(counterIndex, "", "  ")
+	if err != nil {
 
-		if err != nil {
+		return err
+	}
 
-			return err
-		}
+	if err := os.WriteFile(indexFilePath, data, 0644); err != nil {
 
-		handle := im.indexHandles[counterID]
-
-		handle.Lock.Lock()
-
-		if err := os.WriteFile(indexFilePath, data, 0644); err != nil {
-
-			handle.Lock.Unlock()
-
-			return err
-		}
-
-		handle.Lock.Unlock()
+		return err
 	}
 
 	return nil
 }
 
-func (im *IndexManager) GetIndexMap(counterID uint16, objectID uint32) (*IndexEntry, error) {
+func (im *IndexManager) GetIndexMap(objectID uint32) (*IndexEntry, error) {
 
 	im.mu.RLock()
 
 	defer im.mu.RUnlock()
 
-	data := im.indexMap[counterID][objectID]
+	if len(im.indexMap) == 0 {
 
-	if data == nil {
+		indexFilePath := im.BaseDir + "/index.json"
 
-		return nil, fmt.Errorf("no index map found for counter %d", counterID)
+		if _, err := os.Stat(indexFilePath); err == nil {
+
+			data, err := os.ReadFile(indexFilePath)
+
+			if err != nil {
+
+				return nil, fmt.Errorf("failed to read index file: %v", err)
+			}
+
+			if err := json.Unmarshal(data, &im.indexMap); err != nil {
+
+				return nil, fmt.Errorf("failed to parse index file: %v", err)
+			}
+		}
 	}
 
-	return data, nil
-}
+	entry, exists := im.indexMap[objectID]
 
-func (im *IndexManager) GetIndexHandle(counterID uint16) (*IndexHandle, error) {
+	if !exists {
 
-	if handle, exits := im.indexHandles[counterID]; exits {
-
-		return handle, nil
+		return nil, fmt.Errorf("no index map found for objectID %d", objectID)
 	}
 
-	return nil, fmt.Errorf("no index handle for counter %d", counterID)
-}
-
-func (im *IndexManager) GetIndexFilePath(counterID uint16, t time.Time) string {
-
-	year := strconv.Itoa(t.Year())
-
-	month := fmt.Sprintf("%02d", t.Month())
-
-	day := fmt.Sprintf("%02d", t.Day())
-
-	datePath := filepath.Join(im.BaseDir, year, month, day)
-
-	counterDir := filepath.Join(datePath, "counter_"+strconv.Itoa(int(counterID)))
-
-	return filepath.Join(counterDir, "index.json")
+	return entry, nil
 }

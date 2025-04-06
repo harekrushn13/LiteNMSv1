@@ -3,10 +3,9 @@ package helper
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
-	"time"
+	"syscall"
 )
 
 type FileHandle struct {
@@ -22,7 +21,7 @@ type FileHandle struct {
 }
 
 type FileManager struct {
-	handles map[uint16]map[uint8]*FileHandle // handles map[counterID][partition]
+	handles map[uint8]*FileHandle // handles [partition]
 
 	handlesMux sync.RWMutex
 
@@ -37,39 +36,36 @@ func NewFileManager(baseDir string) *FileManager {
 
 	return &FileManager{
 
-		handles: make(map[uint16]map[uint8]*FileHandle),
+		handles: make(map[uint8]*FileHandle),
 
 		handlesMux: sync.RWMutex{},
 
-		BaseDir: baseDir,
-
-		PartitionCount: 3,
+		BaseDir: baseDir, // ./src/storage/database/YYYY/MM/DD/counter_1
 
 		FileGrowth: 64,
 	}
 }
 
-func (fm *FileManager) GetHandle(counterID uint16, partition uint8) (*FileHandle, error) {
+func (fm *FileManager) GetHandle(partition uint8) (*FileHandle, error) {
+
+	fm.handlesMux.RLock()
+
+	if handle, exists := fm.handles[partition]; exists {
+
+		fm.handlesMux.RUnlock()
+
+		return handle, nil
+	}
+
+	fm.handlesMux.RUnlock()
 
 	fm.handlesMux.Lock()
 
 	defer fm.handlesMux.Unlock()
 
-	if _, exists := fm.handles[counterID]; !exists {
+	partitionFile := fm.BaseDir + "/partition_" + strconv.Itoa(int(partition)) + ".bin"
 
-		fm.handles[counterID] = make(map[uint8]*FileHandle)
-	}
-
-	if handle, exists := fm.handles[counterID][partition]; exists {
-
-		return handle, nil
-	}
-
-	partitionFile := fm.GetPartitionFilePath(counterID, partition, time.Now())
-
-	counterDir := filepath.Dir(partitionFile)
-
-	if err := os.MkdirAll(counterDir, 0755); err != nil {
+	if err := os.MkdirAll(fm.BaseDir, 0755); err != nil {
 
 		return nil, err
 	}
@@ -101,29 +97,45 @@ func (fm *FileManager) GetHandle(counterID uint16, partition uint8) (*FileHandle
 		Lock: &sync.RWMutex{},
 	}
 
-	fm.handles[counterID][partition] = handle
+	fm.handles[partition] = handle
 
 	return handle, nil
 }
 
-func (fm *FileManager) GetPartitionFilePath(counterID uint16, partition uint8, t time.Time) string {
+func (fm *FileManager) EnsureCapacity(handle *FileHandle, requiredSize int64) error {
 
-	year := strconv.Itoa(t.Year())
+	handle.Lock.Lock()
 
-	month := fmt.Sprintf("%02d", t.Month())
+	defer handle.Lock.Unlock()
 
-	day := fmt.Sprintf("%02d", t.Day())
+	if handle.Offset+requiredSize <= handle.AvailableSize {
 
-	datePath := filepath.Join(fm.BaseDir, year, month, day)
+		return nil
+	}
 
-	counterDir := filepath.Join(datePath, "counter_"+strconv.Itoa(int(counterID)))
+	if handle.MmapData != nil {
 
-	partitionFile := filepath.Join(counterDir, fmt.Sprintf("partition_%d.bin", partition))
+		if err := syscall.Munmap(handle.MmapData); err != nil {
 
-	return partitionFile
-}
+			return fmt.Errorf("munmap failed: %v", err)
+		}
+	}
 
-func (fm *FileManager) GetPartition(objectID uint32) uint8 {
+	handle.AvailableSize = handle.Offset + fm.FileGrowth // just 64 byte adding
 
-	return uint8(objectID % uint32(fm.PartitionCount))
+	if err := handle.File.Truncate(handle.AvailableSize); err != nil {
+
+		return fmt.Errorf("failed to grow file: %v", err)
+	}
+
+	data, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+
+	if err != nil {
+
+		return fmt.Errorf("mmap failed: %v", err)
+	}
+
+	handle.MmapData = data
+
+	return nil
 }

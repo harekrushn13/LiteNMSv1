@@ -34,7 +34,7 @@ var CounterTypeMapping = map[uint16]DataType{
 func NewGlobalConfig() *GlobalConfig {
 
 	return &GlobalConfig{
-		BaseDir: "./src/storage/database",
+		BaseDir: "./src/storage/database/",
 
 		WriterCount: 3,
 

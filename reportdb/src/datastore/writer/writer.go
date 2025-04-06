@@ -4,16 +4,18 @@ import (
 	"log"
 	. "reportdb/config"
 	. "reportdb/src/storage"
-	. "reportdb/src/storage/helper"
+	. "reportdb/src/utils"
+	"strconv"
 	"sync"
+	"time"
 )
 
 type WriterPool struct {
-	workers []*Writer
+	writers []*Writer
 
 	pollCh <-chan []RowData
 
-	workerChannels []chan RowData
+	writerChannels []chan RowData
 }
 
 type Writer struct {
@@ -21,7 +23,7 @@ type Writer struct {
 
 	TaskQueue <-chan RowData
 
-	store *StorageEngine
+	storePool *StorageEnginePool
 
 	wg *sync.WaitGroup
 }
@@ -30,34 +32,34 @@ func NewWriterPool(ch <-chan []RowData, writerCount uint8) *WriterPool {
 
 	return &WriterPool{
 
-		workers: make([]*Writer, writerCount),
+		writers: make([]*Writer, writerCount),
 
 		pollCh: ch,
 
-		workerChannels: make([]chan RowData, writerCount),
+		writerChannels: make([]chan RowData, writerCount),
 	}
 }
 
-func (wp *WriterPool) StartWriter(writerCount uint8, fileCfg *FileManager, indexCfg *IndexManager, baseDir string, wg *sync.WaitGroup) {
+func (wp *WriterPool) StartWriter(writerCount uint8, baseDir string, wg *sync.WaitGroup, sp *StorageEnginePool) {
 
 	for i := uint8(0); i < writerCount; i++ {
 
-		wp.workerChannels[i] = make(chan RowData, 50)
+		wp.writerChannels[i] = make(chan RowData, 50)
 
-		wp.workers[i] = &Writer{
+		wp.writers[i] = &Writer{
 
 			ID: i,
 
-			TaskQueue: wp.workerChannels[i],
+			TaskQueue: wp.writerChannels[i],
 
-			store: NewStorageEngine(fileCfg, indexCfg, baseDir),
+			storePool: sp,
 
 			wg: wg,
 		}
 
 		wg.Add(1)
 
-		go wp.workers[i].runWorker()
+		go wp.writers[i].runWorker(baseDir)
 	}
 
 	go func(writerCount uint8) {
@@ -68,27 +70,59 @@ func (wp *WriterPool) StartWriter(writerCount uint8, fileCfg *FileManager, index
 
 				writerIdx := uint8((uint32(row.CounterId) + row.ObjectId) % uint32(writerCount))
 
-				wp.workerChannels[writerIdx] <- row
+				wp.writerChannels[writerIdx] <- row
 			}
 		}
 
-		for _, ch := range wp.workerChannels {
+		for _, ch := range wp.writerChannels {
 
 			close(ch)
 		}
 	}(writerCount)
 }
 
-func (w *Writer) runWorker() {
+func (w *Writer) runWorker(baseDir string) {
 
 	defer w.wg.Done()
 
 	for row := range w.TaskQueue {
 
-		if err := w.store.Save(row); err != nil {
+		day := time.Unix(int64(row.Timestamp), 0).Truncate(24 * time.Hour).UTC()
 
-			log.Printf("Error writing row: %v", err)
+		path := baseDir + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
+
+		store := w.storePool.GetEngine(path)
+
+		partition := GetPartition(row.ObjectId, store.PartitionCount)
+
+		handle, err := store.FileCfg.GetHandle(partition)
+
+		if err != nil {
+
+			log.Printf("failed to get file handle: %w", err)
 		}
 
+		data, err := EncodeData(row)
+
+		if err != nil {
+
+			log.Printf("failed to encode data: %w", err)
+		}
+
+		if err := store.FileCfg.EnsureCapacity(handle, int64(len(data))); err != nil {
+
+			log.Printf("failed to ensure capacity: %w", err)
+		}
+
+		offset, err := store.Put(handle, data)
+
+		if err != nil {
+
+			log.Printf("failed to write data: %w", err)
+		}
+
+		store.IndexCfg.Update(row.ObjectId, offset, row.Timestamp)
+
+		store.IndexCfg.Save()
 	}
 }

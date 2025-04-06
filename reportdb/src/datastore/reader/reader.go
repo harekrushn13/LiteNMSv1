@@ -1,15 +1,14 @@
 package reader
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"reportdb/config"
-	"reportdb/src/storage"
-	"reportdb/src/storage/helper"
+	. "reportdb/config"
+	. "reportdb/src/storage"
+	. "reportdb/src/storage/helper"
+	. "reportdb/src/utils"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -22,28 +21,28 @@ type Query struct {
 
 	to uint32
 
-	fileCfg *helper.FileManager
+	baseDir string // ./src/storage/database/
+}
 
-	indexCfg *helper.IndexManager
+type ReaderPool struct {
+	readres []*Reader
 }
 
 type Reader struct {
-	wg *sync.WaitGroup
+	storePool *StorageEnginePool
 
-	BaseDir string
+	wg *sync.WaitGroup
 }
 
-func NewReader(wg *sync.WaitGroup, baseDir string) *Reader {
+func NewReaderPool(readerCount uint8) *ReaderPool {
 
-	return &Reader{
+	return &ReaderPool{
 
-		wg: wg,
-
-		BaseDir: baseDir,
+		readres: make([]*Reader, readerCount),
 	}
 }
 
-func NewQuery(counterID uint16, objectID uint32, from uint32, to uint32, fileCfg *helper.FileManager, indexCfg *helper.IndexManager) *Query {
+func NewQuery(counterID uint16, objectID uint32, from uint32, to uint32, baseDir string) *Query {
 
 	return &Query{
 
@@ -55,54 +54,51 @@ func NewQuery(counterID uint16, objectID uint32, from uint32, to uint32, fileCfg
 
 		to: to,
 
-		fileCfg: fileCfg,
-
-		indexCfg: indexCfg,
+		baseDir: baseDir,
 	}
 }
 
-func (r *Reader) StartReader(readerCount uint8, fileCfg *helper.FileManager, indexCfg *helper.IndexManager) {
+func (rp *ReaderPool) StartReader(readerCount uint8, baseDir string, wg *sync.WaitGroup, sp *StorageEnginePool) {
 
 	for i := uint8(0); i < readerCount; i++ {
 
-		r.wg.Add(1)
+		rp.readres[i] = &Reader{
 
-		go r.runQuery(fileCfg, indexCfg)
+			storePool: sp,
+
+			wg: wg,
+		}
+
+		wg.Add(1)
+
+		go rp.readres[i].runReader(baseDir)
 	}
 }
 
-func (r *Reader) runQuery(fileCfg *helper.FileManager, indexCfg *helper.IndexManager) {
+func (r *Reader) runReader(baseDir string) {
 
 	defer r.wg.Done()
 
-	t := time.NewTicker(1 * time.Second)
-
-	defer t.Stop()
-
 	to := time.Now().Unix()
 
-	stopTimer := time.NewTimer(10 * time.Second)
+	ticker := time.NewTicker(time.Second)
 
-	defer stopTimer.Stop()
+	defer ticker.Stop()
+
+	stopTime := time.NewTicker(10 * time.Second)
+
+	defer stopTime.Stop()
 
 	for {
 		select {
 
-		case <-t.C:
+		case <-ticker.C:
+			//query := NewQuery(3, 3, uint32(to), uint32(to)+7, baseDir)
+			query := NewQuery(3, 3, 1743767934, uint32(to)+7, baseDir)
 
-			//query := NewQuery(3, 3, 1743569072, uint32(to)+7, fileCfg, indexCfg)
-			query := NewQuery(3, 3, uint32(to), uint32(to)+7, fileCfg, indexCfg)
+			query.runQuery(r.storePool)
 
-			v, err := query.fetchData(r.BaseDir)
-
-			if err != nil {
-
-				fmt.Println(err)
-			}
-
-			fmt.Printf("%#v\n", v)
-
-		case <-stopTimer.C:
+		case <-stopTime.C:
 
 			return
 		}
@@ -110,49 +106,41 @@ func (r *Reader) runQuery(fileCfg *helper.FileManager, indexCfg *helper.IndexMan
 
 }
 
-func (query *Query) fetchData(baseDir string) ([]interface{}, error) {
+func (q *Query) runQuery(sp *StorageEnginePool) {
 
-	fromTime := time.Unix(int64(query.from), 0).Truncate(24 * time.Hour).UTC()
+	v, err := q.fetchData(sp)
 
-	toTime := time.Unix(int64(query.to), 0).Truncate(24 * time.Hour).UTC()
+	if err != nil {
 
-	today := time.Now().Truncate(24 * time.Hour).UTC()
+		fmt.Println(err)
+	}
+
+	fmt.Printf("%#v\n", v)
+
+}
+
+func (q *Query) fetchData(sp *StorageEnginePool) ([]interface{}, error) {
+
+	dataType, exists := CounterTypeMapping[q.counterID]
+
+	if !exists {
+
+		return nil, fmt.Errorf("unknown counter ID: %d", q.counterID)
+	}
+
+	fromTime := time.Unix(int64(q.from), 0).Truncate(24 * time.Hour).UTC()
+
+	toTime := time.Unix(int64(q.to), 0).Truncate(24 * time.Hour).UTC()
 
 	var results []interface{}
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
-		if current.Equal(today) {
+		path := q.baseDir + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(q.counterID))
 
-			entry, err := query.indexCfg.GetIndexMap(query.counterID, query.objectID)
+		store := sp.GetEngine(path)
 
-			if err != nil {
-
-				return nil, err
-			}
-
-			validOffsets, err := getValidOffsets(entry, query.from, query.to)
-
-			if err != nil {
-
-				return nil, fmt.Errorf("failed to get valid offsets: %v", err)
-			}
-
-			store := storage.NewStorageEngine(query.fileCfg, query.indexCfg, baseDir)
-
-			dayResults, err := store.Get(query.counterID, query.objectID, current, validOffsets, config.CounterTypeMapping[query.counterID])
-
-			if err != nil {
-
-				return nil, fmt.Errorf("failed to fetch today's data: %v", err)
-			}
-
-			results = append(results, dayResults...)
-
-			continue
-		}
-
-		dayResults, err, skip := query.fetchDayData(baseDir, current)
+		dayResults, err, skip := q.fetchDayData(store, dataType)
 
 		if skip == true && dayResults == nil {
 
@@ -169,47 +157,65 @@ func (query *Query) fetchData(baseDir string) ([]interface{}, error) {
 
 	if len(results) == 0 {
 
-		return nil, fmt.Errorf("no data found in time range %d-%d", query.from, query.to)
+		return nil, fmt.Errorf("no data found in time range %d-%d", q.from, q.to)
 	}
 
 	return results, nil
 }
 
-func (query *Query) fetchDayData(baseDir string, day time.Time) ([]interface{}, error, bool) {
+func (q *Query) fetchDayData(store *StorageEngine, dataType DataType) ([]interface{}, error, bool) {
 
-	dataType, exists := config.CounterTypeMapping[query.counterID]
+	entry, err := store.IndexCfg.GetIndexMap(q.objectID)
 
-	if !exists {
+	if err != nil {
 
-		return nil, fmt.Errorf("unknown counter ID: %d", query.counterID), false
+		return nil, err, true
 	}
 
-	indexPath := getIndexFilePath(baseDir, query.counterID, day)
+	if entry.EndTime < q.from || entry.StartTime > q.to {
 
-	indexData, err := getIndex(query, indexPath, day, time.Now())
-
-	entry, exists := indexData[query.objectID]
-
-	if !exists {
-
-		return nil, fmt.Errorf("no data found for objectID %d", query.objectID), true
+		return nil, fmt.Errorf("data for objectID %d is not within the requested time range", q.objectID), true
 	}
 
-	if entry.EndTime < query.from || entry.StartTime > query.to {
-
-		return nil, fmt.Errorf("data for objectID %d is not within the requested time range", query.objectID), true
-	}
-
-	validOffsets, err := getValidOffsets(entry, query.from, query.to)
+	validOffsets, err := getValidOffsets(entry, q.from, q.to)
 
 	if err != nil {
 
 		return nil, fmt.Errorf("failed to get valid offsets: %v", err), false
 	}
 
-	store := storage.NewStorageEngine(query.fileCfg, query.indexCfg, baseDir)
+	partition := GetPartition(q.objectID, store.PartitionCount)
 
-	dayResults, err := store.Get(query.counterID, query.objectID, day, validOffsets, dataType)
+	handle, err := store.FileCfg.GetHandle(partition)
+
+	if err != nil {
+
+		return nil, err, false
+	}
+
+	data, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.Offset), syscall.PROT_READ, syscall.MAP_SHARED)
+
+	var dayResults []interface{}
+
+	for _, offset := range validOffsets {
+
+		value, err := store.Get(data, offset, dataType)
+
+		if err != nil {
+
+			continue
+		}
+
+		decode, err := DecodeData(value, dataType)
+
+		if err != nil {
+
+			continue
+		}
+
+		dayResults = append(dayResults, decode)
+
+	}
 
 	if err != nil {
 
@@ -219,62 +225,7 @@ func (query *Query) fetchDayData(baseDir string, day time.Time) ([]interface{}, 
 	return dayResults, nil, false
 }
 
-func getIndexFilePath(baseDir string, counterID uint16, t time.Time) string {
-
-	year := strconv.Itoa(t.Year())
-
-	month := fmt.Sprintf("%02d", t.Month())
-
-	day := fmt.Sprintf("%02d", t.Day())
-
-	datePath := filepath.Join(baseDir, year, month, day)
-
-	counterDir := filepath.Join(datePath, "counter_"+strconv.Itoa(int(counterID)))
-
-	return filepath.Join(counterDir, "index.json")
-}
-
-func getIndex(query *Query, indexPath string, current time.Time, day time.Time) (map[uint32]*helper.IndexEntry, error) {
-
-	var handle *helper.IndexHandle
-
-	cY, cM, cD := current.Date()
-
-	dY, dM, dD := day.Date()
-
-	if cY == dY && cM == dM && cD == dD {
-
-		handle, _ = query.indexCfg.GetIndexHandle(query.counterID)
-
-		if handle != nil {
-
-			handle.Lock.RLock()
-		}
-	}
-
-	data, err := os.ReadFile(indexPath)
-
-	if handle != nil {
-
-		handle.Lock.RUnlock()
-	}
-
-	if err != nil {
-
-		return nil, err
-	}
-
-	var indexData map[uint32]*helper.IndexEntry
-
-	if err := json.Unmarshal(data, &indexData); err != nil {
-
-		return nil, err
-	}
-
-	return indexData, nil
-}
-
-func getValidOffsets(entry *helper.IndexEntry, from uint32, to uint32) ([]int64, error) {
+func getValidOffsets(entry *IndexEntry, from uint32, to uint32) ([]int64, error) {
 
 	var validOffsets []int64
 
