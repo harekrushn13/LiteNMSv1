@@ -5,6 +5,7 @@ import (
 	"fmt"
 	. "reportdb/src/storage/helper"
 	. "reportdb/src/utils"
+	"time"
 )
 
 type StorageEngine struct {
@@ -15,6 +16,12 @@ type StorageEngine struct {
 	PartitionCount uint8
 
 	BaseDir string // ex. ./src/storage/database/YYYY/MM/DD/counter_1
+
+	isUsedPut bool
+
+	lastAccess int64
+
+	lastSave int64
 }
 
 func NewStorageEngine(baseDir string) *StorageEngine {
@@ -31,6 +38,10 @@ func NewStorageEngine(baseDir string) *StorageEngine {
 }
 
 func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) error {
+
+	store.isUsedPut = true
+
+	store.lastAccess = time.Now().Unix()
 
 	partition := GetPartition(objectId, store.PartitionCount)
 
@@ -58,21 +69,24 @@ func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) 
 
 	store.indexCfg.Update(objectId, offset, timestamp)
 
-	err = store.indexCfg.Save()
-
-	if err != nil {
-
-		return err
-	}
+	//err = store.indexCfg.Save()
+	//
+	//if err != nil {
+	//
+	//	return err
+	//}
 
 	return nil
 }
 
 func (store *StorageEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte, error) {
 
+	store.lastAccess = time.Now().Unix()
+
 	entry, err := store.indexCfg.GetIndexMap(objectId)
 
 	if err != nil {
+
 		return nil, fmt.Errorf("get index map error: %v", err)
 	}
 

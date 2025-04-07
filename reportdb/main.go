@@ -21,6 +21,8 @@ func main() {
 
 	storagePool := NewStorageEnginePool()
 
+	go storagePool.SaveEngine(&wg)
+
 	writePool := NewWriterPool(pollCh, globalCfg.WriterCount)
 
 	writePool.StartWriter(globalCfg.WriterCount, globalCfg.BaseDir, &wg, storagePool)
