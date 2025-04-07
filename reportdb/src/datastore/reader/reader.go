@@ -4,11 +4,9 @@ import (
 	"fmt"
 	. "reportdb/config"
 	. "reportdb/src/storage"
-	. "reportdb/src/storage/helper"
 	. "reportdb/src/utils"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -85,7 +83,7 @@ func (r *Reader) runReader(baseDir string) {
 
 	defer ticker.Stop()
 
-	stopTime := time.NewTicker(10 * time.Second)
+	stopTime := time.NewTicker(12 * time.Second)
 
 	defer stopTime.Stop()
 
@@ -94,7 +92,7 @@ func (r *Reader) runReader(baseDir string) {
 
 		case <-ticker.C:
 			//query := NewQuery(3, 3, uint32(to), uint32(to)+7, baseDir)
-			query := NewQuery(3, 3, 1743767934, uint32(to)+7, baseDir)
+			query := NewQuery(3, 3, 1744016025, uint32(to)+10, baseDir)
 
 			query.runQuery(r.storePool)
 
@@ -140,19 +138,24 @@ func (q *Query) fetchData(sp *StorageEnginePool) ([]interface{}, error) {
 
 		store := sp.GetEngine(path)
 
-		dayResults, err, skip := q.fetchDayData(store, dataType)
+		data, err := store.Get(q.objectID, q.from, q.to)
 
-		if skip == true && dayResults == nil {
+		if err != nil {
 
 			continue
 		}
 
-		if err != nil {
+		for _, val := range data {
 
-			return nil, fmt.Errorf("failed to fetch data for %s: %v", current.Format("2006-01-02"), err)
+			value, err := DecodeData(val, dataType)
+
+			if err != nil {
+
+				continue
+			}
+
+			results = append(results, value)
 		}
-
-		results = append(results, dayResults...)
 	}
 
 	if len(results) == 0 {
@@ -161,99 +164,4 @@ func (q *Query) fetchData(sp *StorageEnginePool) ([]interface{}, error) {
 	}
 
 	return results, nil
-}
-
-func (q *Query) fetchDayData(store *StorageEngine, dataType DataType) ([]interface{}, error, bool) {
-
-	entry, err := store.IndexCfg.GetIndexMap(q.objectID)
-
-	if err != nil {
-
-		return nil, err, true
-	}
-
-	if entry.EndTime < q.from || entry.StartTime > q.to {
-
-		return nil, fmt.Errorf("data for objectID %d is not within the requested time range", q.objectID), true
-	}
-
-	validOffsets, err := getValidOffsets(entry, q.from, q.to)
-
-	if err != nil {
-
-		return nil, fmt.Errorf("failed to get valid offsets: %v", err), false
-	}
-
-	partition := GetPartition(q.objectID, store.PartitionCount)
-
-	handle, err := store.FileCfg.GetHandle(partition)
-
-	if err != nil {
-
-		return nil, err, false
-	}
-
-	data, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.Offset), syscall.PROT_READ, syscall.MAP_SHARED)
-
-	var dayResults []interface{}
-
-	for _, offset := range validOffsets {
-
-		value, err := store.Get(data, offset, dataType)
-
-		if err != nil {
-
-			continue
-		}
-
-		decode, err := DecodeData(value, dataType)
-
-		if err != nil {
-
-			continue
-		}
-
-		dayResults = append(dayResults, decode)
-
-	}
-
-	if err != nil {
-
-		return nil, fmt.Errorf("failed to read day data: %v", err), false
-	}
-
-	return dayResults, nil, false
-}
-
-func getValidOffsets(entry *IndexEntry, from uint32, to uint32) ([]int64, error) {
-
-	var validOffsets []int64
-
-	length := uint8(len(entry.Offsets))
-
-	var start uint8
-
-	var end uint8
-
-	if from <= entry.StartTime {
-
-		start = uint8(0)
-
-	} else {
-
-		start = uint8(from - entry.StartTime)
-	}
-
-	if to >= entry.EndTime {
-
-		end = length
-
-	} else {
-
-		end = length - uint8(entry.EndTime-to)
-	}
-
-	validOffsets = append(validOffsets, entry.Offsets[start:end]...)
-
-	return validOffsets, nil
 }

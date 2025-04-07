@@ -32,9 +32,11 @@ func EncodeData(row RowData) ([]byte, error) {
 			return nil, fmt.Errorf("invalid uint64 value for counter %d", row.CounterId)
 		}
 
-		data := make([]byte, 8)
+		data := make([]byte, 4+8)
 
-		binary.LittleEndian.PutUint64(data, val)
+		binary.LittleEndian.PutUint32(data, 8)
+
+		binary.LittleEndian.PutUint64(data[4:], val)
 
 		return data, nil
 
@@ -47,9 +49,11 @@ func EncodeData(row RowData) ([]byte, error) {
 			return nil, fmt.Errorf("invalid float64 value for counter %d", row.CounterId)
 		}
 
-		data := make([]byte, 8)
+		data := make([]byte, 4+8)
 
-		binary.LittleEndian.PutUint64(data, math.Float64bits(val))
+		binary.LittleEndian.PutUint32(data, 8)
+
+		binary.LittleEndian.PutUint64(data[4:], math.Float64bits(val))
 
 		return data, nil
 
@@ -100,21 +104,4 @@ func DecodeData(data []byte, dataType DataType) (interface{}, error) {
 	}
 
 	return value, nil
-}
-
-func LengthOfData(data []byte, offset int64, dataType DataType) (int64, int64, error) {
-
-	switch dataType {
-
-	case TypeUint64, TypeFloat64:
-
-		return offset, offset + 8, nil
-
-	case TypeString:
-
-		return offset + 4, offset + 4 + int64(data[offset]), nil
-	}
-
-	return 0, 0, fmt.Errorf("unsupported data type: %d", dataType)
-
 }

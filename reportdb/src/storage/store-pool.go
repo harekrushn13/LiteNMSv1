@@ -1,0 +1,43 @@
+package storage
+
+import (
+	"sync"
+)
+
+type StorageEnginePool struct {
+	pool map[string]*StorageEngine // map["./src/storage/database/YYYY/MM/DD/counter_1"]
+
+	mu sync.RWMutex
+}
+
+func NewStorageEnginePool() *StorageEnginePool {
+
+	return &StorageEnginePool{
+
+		pool: make(map[string]*StorageEngine),
+	}
+}
+
+func (p *StorageEnginePool) GetEngine(baseDir string) *StorageEngine {
+
+	p.mu.RLock()
+
+	if engine, exists := p.pool[baseDir]; exists {
+
+		p.mu.RUnlock()
+
+		return engine
+	}
+
+	p.mu.RUnlock()
+
+	p.mu.Lock()
+
+	defer p.mu.Unlock()
+
+	engine := NewStorageEngine(baseDir)
+
+	p.pool[baseDir] = engine
+
+	return engine
+}

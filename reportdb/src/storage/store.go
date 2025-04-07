@@ -1,66 +1,28 @@
 package storage
 
 import (
-	. "reportdb/config"
+	"encoding/binary"
+	"fmt"
 	. "reportdb/src/storage/helper"
 	. "reportdb/src/utils"
-	"sync"
 )
 
-type StorageEnginePool struct {
-	pool map[string]*StorageEngine // map["./src/storage/database/YYYY/MM/DD/counter_1"]
-
-	mu sync.RWMutex
-}
-
 type StorageEngine struct {
-	FileCfg *FileManager
+	fileCfg *FileManager
 
-	IndexCfg *IndexManager
+	indexCfg *IndexManager
 
 	PartitionCount uint8
 
 	BaseDir string // ex. ./src/storage/database/YYYY/MM/DD/counter_1
 }
 
-func NewStorageEnginePool() *StorageEnginePool {
-
-	return &StorageEnginePool{
-
-		pool: make(map[string]*StorageEngine),
-	}
-}
-
-func (p *StorageEnginePool) GetEngine(baseDir string) *StorageEngine {
-
-	p.mu.RLock()
-
-	if engine, exists := p.pool[baseDir]; exists {
-
-		p.mu.RUnlock()
-
-		return engine
-	}
-
-	p.mu.RUnlock()
-
-	p.mu.Lock()
-
-	defer p.mu.Unlock()
-
-	engine := NewStorageEngine(baseDir)
-
-	p.pool[baseDir] = engine
-
-	return engine
-}
-
 func NewStorageEngine(baseDir string) *StorageEngine {
 
 	return &StorageEngine{
-		FileCfg: NewFileManager(baseDir),
+		fileCfg: NewFileManager(baseDir),
 
-		IndexCfg: NewIndexManager(baseDir),
+		indexCfg: NewIndexManager(baseDir),
 
 		BaseDir: baseDir,
 
@@ -68,7 +30,21 @@ func NewStorageEngine(baseDir string) *StorageEngine {
 	}
 }
 
-func (store *StorageEngine) Put(handle *FileHandle, data []byte) (int64, error) {
+func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) error {
+
+	partition := GetPartition(objectId, store.PartitionCount)
+
+	handle, err := store.fileCfg.GetHandle(partition)
+
+	if err != nil {
+
+		return err
+	}
+
+	if err := store.fileCfg.EnsureCapacity(handle, int64(len(data))); err != nil {
+
+		return err
+	}
 
 	handle.Lock.Lock()
 
@@ -80,19 +56,73 @@ func (store *StorageEngine) Put(handle *FileHandle, data []byte) (int64, error) 
 
 	handle.Offset += int64(len(data))
 
-	return offset, nil
-}
+	store.indexCfg.Update(objectId, offset, timestamp)
 
-func (store *StorageEngine) Get(data []byte, offset int64, dataType DataType) ([]byte, error) {
-
-	start, end, err := LengthOfData(data, offset, dataType)
+	err = store.indexCfg.Save()
 
 	if err != nil {
 
-		return nil, err
+		return err
 	}
 
-	value := data[start:end]
+	return nil
+}
 
-	return value, nil
+func (store *StorageEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte, error) {
+
+	entry, err := store.indexCfg.GetIndexMap(objectId)
+
+	if err != nil {
+		return nil, fmt.Errorf("get index map error: %v", err)
+	}
+
+	if entry.EndTime < from || entry.StartTime > to {
+
+		return nil, fmt.Errorf("data for objectID %d is not within the requested time range", objectId)
+	}
+
+	validOffsets, err := store.indexCfg.GetValidOffsets(entry, from, to)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("failed to get valid offsets: %v", err)
+	}
+
+	partition := GetPartition(objectId, store.PartitionCount)
+
+	handle, err := store.fileCfg.GetHandle(partition)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("failed to get handle for partition %d: %v", partition, err)
+	}
+
+	handle.Lock.RLock()
+
+	defer handle.Lock.RUnlock()
+
+	var dayResults [][]byte
+
+	for _, offset := range validOffsets {
+
+		if offset+4 > int64(len(handle.MmapData)) {
+
+			return nil, fmt.Errorf("offset %d out of bounds for length prefix", offset)
+		}
+
+		length := binary.LittleEndian.Uint32(handle.MmapData[offset : offset+4])
+
+		if offset+4+int64(length) > int64(len(handle.MmapData)) {
+
+			return nil, fmt.Errorf("record at offset %d extends beyond file bounds", offset)
+		}
+
+		record := make([]byte, length)
+
+		copy(record, handle.MmapData[offset+4:offset+4+int64(length)])
+
+		dayResults = append(dayResults, record)
+	}
+
+	return dayResults, nil
 }

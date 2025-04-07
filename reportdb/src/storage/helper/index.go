@@ -126,3 +126,36 @@ func (im *IndexManager) GetIndexMap(objectID uint32) (*IndexEntry, error) {
 
 	return entry, nil
 }
+
+func (im *IndexManager) GetValidOffsets(entry *IndexEntry, from uint32, to uint32) ([]int64, error) {
+
+	var validOffsets []int64
+
+	length := uint8(len(entry.Offsets))
+
+	var start uint8
+
+	var end uint8
+
+	if from <= entry.StartTime {
+
+		start = uint8(0)
+
+	} else {
+
+		start = uint8(from - entry.StartTime)
+	}
+
+	if to >= entry.EndTime {
+
+		end = length
+
+	} else {
+
+		end = length - uint8(entry.EndTime-to)
+	}
+
+	validOffsets = append(validOffsets, entry.Offsets[start:end]...)
+
+	return validOffsets, nil
+}

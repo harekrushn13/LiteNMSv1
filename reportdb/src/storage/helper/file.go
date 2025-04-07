@@ -97,6 +97,10 @@ func (fm *FileManager) GetHandle(partition uint8) (*FileHandle, error) {
 		Lock: &sync.RWMutex{},
 	}
 
+	data, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+
+	handle.MmapData = data
+
 	fm.handles[partition] = handle
 
 	return handle, nil

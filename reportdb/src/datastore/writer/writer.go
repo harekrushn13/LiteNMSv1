@@ -93,15 +93,6 @@ func (w *Writer) runWorker(baseDir string) {
 
 		store := w.storePool.GetEngine(path)
 
-		partition := GetPartition(row.ObjectId, store.PartitionCount)
-
-		handle, err := store.FileCfg.GetHandle(partition)
-
-		if err != nil {
-
-			log.Printf("failed to get file handle: %w", err)
-		}
-
 		data, err := EncodeData(row)
 
 		if err != nil {
@@ -109,20 +100,12 @@ func (w *Writer) runWorker(baseDir string) {
 			log.Printf("failed to encode data: %w", err)
 		}
 
-		if err := store.FileCfg.EnsureCapacity(handle, int64(len(data))); err != nil {
-
-			log.Printf("failed to ensure capacity: %w", err)
-		}
-
-		offset, err := store.Put(handle, data)
+		err = store.Put(row.ObjectId, row.Timestamp, data)
 
 		if err != nil {
 
 			log.Printf("failed to write data: %w", err)
 		}
 
-		store.IndexCfg.Update(row.ObjectId, offset, row.Timestamp)
-
-		store.IndexCfg.Save()
 	}
 }
