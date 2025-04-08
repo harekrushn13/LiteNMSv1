@@ -3,7 +3,7 @@ package polling
 import (
 	"fmt"
 	"math/rand"
-	"reportdb/config"
+	. "reportdb/config"
 	"time"
 )
 
@@ -26,9 +26,9 @@ func NewPollerEngine() *PollerEngine {
 	}
 }
 
-func (poller *PollerEngine) PollData(gobalCfg *config.GlobalConfig) <-chan []config.RowData {
+func (poller *PollerEngine) PollData(gobalCfg *GlobalConfig) <-chan []RowData {
 
-	out := make(chan []config.RowData)
+	out := make(chan []RowData)
 
 	go func() {
 
@@ -44,7 +44,7 @@ func (poller *PollerEngine) PollData(gobalCfg *config.GlobalConfig) <-chan []con
 
 		defer stopTimer.Stop()
 
-		var batch []config.RowData
+		var batch []RowData
 
 		for {
 
@@ -60,22 +60,22 @@ func (poller *PollerEngine) PollData(gobalCfg *config.GlobalConfig) <-chan []con
 
 						var value interface{}
 
-						switch config.CounterTypeMapping[counterID] {
+						switch CounterTypeMapping[counterID] {
 
-						case config.TypeUint64:
+						case TypeUint64:
 
 							value = rand.Uint64()
 
-						case config.TypeFloat64:
+						case TypeFloat64:
 
 							value = rand.Float64() * 10
 
-						case config.TypeString:
+						case TypeString:
 
 							value = generateRandomString(rand.Intn(50) + 1)
 						}
 
-						batch = append(batch, config.RowData{
+						batch = append(batch, RowData{
 
 							ObjectId: objectID,
 
@@ -86,7 +86,7 @@ func (poller *PollerEngine) PollData(gobalCfg *config.GlobalConfig) <-chan []con
 							Value: value,
 						})
 
-						if counterID == 3 && objectID == 3 {
+						if counterID == 2 && objectID == 3 {
 
 							fmt.Println(batch[len(batch)-1])
 						}

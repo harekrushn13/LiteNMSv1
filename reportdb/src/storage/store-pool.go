@@ -47,11 +47,11 @@ func (p *StorageEnginePool) SaveEngine(wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	ticker := time.NewTicker(2500 * time.Millisecond)
+	ticker := time.NewTicker(2 * time.Millisecond)
 
 	defer ticker.Stop()
 
-	stopTime := time.NewTicker(12 * time.Second)
+	stopTime := time.NewTicker(15 * time.Second)
 
 	defer stopTime.Stop()
 
@@ -66,6 +66,8 @@ func (p *StorageEnginePool) SaveEngine(wg *sync.WaitGroup) {
 
 				if engine.isUsedPut && engine.lastAccess > engine.lastSave && currentTime-engine.lastSave >= 2 {
 
+					engine.lastSave = currentTime
+
 					engine.indexCfg.Save()
 				}
 			}
@@ -75,6 +77,8 @@ func (p *StorageEnginePool) SaveEngine(wg *sync.WaitGroup) {
 			for _, engine := range p.pool {
 
 				if engine.isUsedPut {
+
+					engine.lastSave = time.Now().Unix()
 
 					engine.indexCfg.Save()
 				}

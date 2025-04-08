@@ -69,13 +69,6 @@ func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) 
 
 	store.indexCfg.Update(objectId, offset, timestamp)
 
-	//err = store.indexCfg.Save()
-	//
-	//if err != nil {
-	//
-	//	return err
-	//}
-
 	return nil
 }
 

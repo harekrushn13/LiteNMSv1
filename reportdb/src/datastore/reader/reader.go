@@ -23,7 +23,7 @@ type Query struct {
 }
 
 type ReaderPool struct {
-	readres []*Reader
+	readers []*Reader
 }
 
 type Reader struct {
@@ -36,7 +36,7 @@ func NewReaderPool(readerCount uint8) *ReaderPool {
 
 	return &ReaderPool{
 
-		readres: make([]*Reader, readerCount),
+		readers: make([]*Reader, readerCount),
 	}
 }
 
@@ -60,7 +60,7 @@ func (rp *ReaderPool) StartReader(readerCount uint8, baseDir string, wg *sync.Wa
 
 	for i := uint8(0); i < readerCount; i++ {
 
-		rp.readres[i] = &Reader{
+		rp.readers[i] = &Reader{
 
 			storePool: sp,
 
@@ -69,7 +69,7 @@ func (rp *ReaderPool) StartReader(readerCount uint8, baseDir string, wg *sync.Wa
 
 		wg.Add(1)
 
-		go rp.readres[i].runReader(baseDir)
+		go rp.readers[i].runReader(baseDir)
 	}
 }
 
@@ -92,7 +92,7 @@ func (r *Reader) runReader(baseDir string) {
 
 		case <-ticker.C:
 			//query := NewQuery(3, 3, uint32(to), uint32(to)+7, baseDir)
-			query := NewQuery(3, 3, 1744016025, uint32(to)+10, baseDir)
+			query := NewQuery(2, 3, 1744016025, uint32(to)+10, baseDir)
 
 			query.runQuery(r.storePool)
 
