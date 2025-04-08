@@ -5,7 +5,6 @@ import (
 	"fmt"
 	. "reportdb/src/storage/helper"
 	. "reportdb/src/utils"
-	"time"
 )
 
 type StorageEngine struct {
@@ -19,8 +18,6 @@ type StorageEngine struct {
 
 	isUsedPut bool
 
-	lastAccess int64
-
 	lastSave int64
 }
 
@@ -29,7 +26,7 @@ func NewStorageEngine(baseDir string) *StorageEngine {
 	return &StorageEngine{
 		fileCfg: NewFileManager(baseDir),
 
-		indexCfg: NewIndexManager(baseDir),
+		indexCfg: NewIndexManager(baseDir, 3),
 
 		BaseDir: baseDir,
 
@@ -41,11 +38,9 @@ func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) 
 
 	store.isUsedPut = true
 
-	store.lastAccess = time.Now().Unix()
+	fileId := GetPartition(objectId, store.PartitionCount)
 
-	partition := GetPartition(objectId, store.PartitionCount)
-
-	handle, err := store.fileCfg.GetHandle(partition)
+	handle, err := store.fileCfg.GetHandle(fileId)
 
 	if err != nil {
 
@@ -67,41 +62,34 @@ func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) 
 
 	handle.Offset += int64(len(data))
 
-	store.indexCfg.Update(objectId, offset, timestamp)
+	store.indexCfg.Update(objectId, offset, timestamp, fileId)
 
 	return nil
 }
 
 func (store *StorageEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte, error) {
 
-	store.lastAccess = time.Now().Unix()
+	fileId := GetPartition(objectId, store.PartitionCount)
 
-	entry, err := store.indexCfg.GetIndexMap(objectId)
+	entryList, err := store.indexCfg.GetIndexMapEntryList(objectId, fileId)
 
 	if err != nil {
 
 		return nil, fmt.Errorf("get index map error: %v", err)
 	}
 
-	if entry.EndTime < from || entry.StartTime > to {
-
-		return nil, fmt.Errorf("data for objectID %d is not within the requested time range", objectId)
-	}
-
-	validOffsets, err := store.indexCfg.GetValidOffsets(entry, from, to)
+	validOffsets, err := store.indexCfg.GetValidOffsets(entryList, from, to)
 
 	if err != nil {
 
 		return nil, fmt.Errorf("failed to get valid offsets: %v", err)
 	}
 
-	partition := GetPartition(objectId, store.PartitionCount)
-
-	handle, err := store.fileCfg.GetHandle(partition)
+	handle, err := store.fileCfg.GetHandle(fileId)
 
 	if err != nil {
 
-		return nil, fmt.Errorf("failed to get handle for partition %d: %v", partition, err)
+		return nil, fmt.Errorf("failed to get handle for partition %d: %v", fileId, err)
 	}
 
 	handle.Lock.RLock()

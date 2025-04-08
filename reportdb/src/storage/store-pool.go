@@ -64,7 +64,7 @@ func (p *StorageEnginePool) SaveEngine(wg *sync.WaitGroup) {
 
 			for _, engine := range p.pool {
 
-				if engine.isUsedPut && engine.lastAccess > engine.lastSave && currentTime-engine.lastSave >= 2 {
+				if engine.isUsedPut && currentTime-engine.lastSave >= 2 {
 
 					engine.lastSave = currentTime
 

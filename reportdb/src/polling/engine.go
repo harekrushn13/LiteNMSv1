@@ -86,7 +86,7 @@ func (poller *PollerEngine) PollData(gobalCfg *GlobalConfig) <-chan []RowData {
 							Value: value,
 						})
 
-						if counterID == 2 && objectID == 3 {
+						if counterID == 3 && objectID == 3 {
 
 							fmt.Println(batch[len(batch)-1])
 						}

@@ -92,7 +92,7 @@ func (r *Reader) runReader(baseDir string) {
 
 		case <-ticker.C:
 			//query := NewQuery(3, 3, uint32(to), uint32(to)+7, baseDir)
-			query := NewQuery(2, 3, 1744016025, uint32(to)+10, baseDir)
+			query := NewQuery(3, 3, 1744019287, uint32(to)+10, baseDir)
 
 			query.runQuery(r.storePool)
 
@@ -137,6 +137,13 @@ func (q *Query) fetchData(sp *StorageEnginePool) ([]interface{}, error) {
 		path := q.baseDir + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(q.counterID))
 
 		store := sp.GetEngine(path)
+
+		if store == nil {
+
+			fmt.Println("store is nil", current.Format("2006/01/02"))
+
+			continue
+		}
 
 		data, err := store.Get(q.objectID, q.from, q.to)
 
