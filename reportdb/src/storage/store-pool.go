@@ -1,90 +1,108 @@
 package storage
 
 import (
+	"log"
 	"sync"
 	"time"
 )
 
-type StorageEnginePool struct {
-	pool map[string]*StorageEngine // map["./src/storage/database/YYYY/MM/DD/counter_1"]
+type StorePool struct {
+	storePool map[string]*StoreEngine // map["./database/YYYY/MM/DD/counter_1"]
 
-	mu sync.RWMutex
+	poolMutex sync.RWMutex
 }
 
-func NewStorageEnginePool() *StorageEnginePool {
+func NewStorePool() *StorePool {
 
-	return &StorageEnginePool{
+	return &StorePool{
 
-		pool: make(map[string]*StorageEngine),
+		storePool: make(map[string]*StoreEngine),
 	}
 }
 
-func (p *StorageEnginePool) GetEngine(baseDir string) *StorageEngine {
+func (storePool *StorePool) GetEngine(path string) *StoreEngine {
 
-	p.mu.RLock()
+	storePool.poolMutex.RLock()
 
-	if engine, exists := p.pool[baseDir]; exists {
+	if engine, exists := storePool.storePool[path]; exists {
 
-		p.mu.RUnlock()
+		storePool.poolMutex.RUnlock()
 
 		return engine
 	}
 
-	p.mu.RUnlock()
+	storePool.poolMutex.RUnlock()
 
-	p.mu.Lock()
+	storePool.poolMutex.Lock()
 
-	defer p.mu.Unlock()
+	defer storePool.poolMutex.Unlock()
 
-	engine := NewStorageEngine(baseDir)
+	engine := NewStorageEngine(path)
 
-	p.pool[baseDir] = engine
+	storePool.storePool[path] = engine
 
 	return engine
 }
 
-func (p *StorageEnginePool) SaveEngine(wg *sync.WaitGroup) {
+func (storePool *StorePool) SaveEngine(waitGroup *sync.WaitGroup) {
 
-	defer wg.Done()
+	waitGroup.Add(1)
 
-	ticker := time.NewTicker(2 * time.Millisecond)
+	go func() {
 
-	defer ticker.Stop()
+		defer waitGroup.Done()
 
-	stopTime := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(2 * time.Millisecond)
 
-	defer stopTime.Stop()
+		defer ticker.Stop()
 
-	for {
-		select {
+		stopTime := time.NewTicker(60 * time.Second)
 
-		case <-ticker.C:
+		defer stopTime.Stop()
 
-			currentTime := time.Now().Unix()
+		for {
+			select {
 
-			for _, engine := range p.pool {
+			case <-ticker.C:
 
-				if engine.isUsedPut && currentTime-engine.lastSave >= 2 {
+				currentTime := time.Now().Unix()
 
-					engine.lastSave = currentTime
+				for _, engine := range storePool.storePool {
 
-					engine.indexCfg.Save()
+					if engine.isUsedPut == true && currentTime-engine.lastSave >= 2 {
+
+						engine.lastSave = currentTime
+
+						err := engine.indexManager.Save()
+
+						if err != nil {
+
+							log.Printf("storePool.SaveEngine error: %s\n", err)
+						}
+					}
 				}
-			}
 
-		case <-stopTime.C:
+			case <-stopTime.C:
 
-			for _, engine := range p.pool {
+				for _, engine := range storePool.storePool {
 
-				if engine.isUsedPut {
+					if engine.isUsedPut == true {
 
-					engine.lastSave = time.Now().Unix()
+						engine.lastSave = time.Now().Unix()
 
-					engine.indexCfg.Save()
+						err := engine.indexManager.Save()
+
+						if err != nil {
+
+							log.Printf("storePool.SaveEngine error: %s\n", err)
+						}
+					}
 				}
-			}
 
-			return
+				return
+			}
 		}
-	}
+
+	}()
+
 }

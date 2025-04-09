@@ -3,6 +3,7 @@ package helper
 import (
 	"fmt"
 	"os"
+	. "reportdb/utils"
 	"strconv"
 	"sync"
 	"syscall"
@@ -21,51 +22,45 @@ type FileHandle struct {
 }
 
 type FileManager struct {
-	handles map[uint8]*FileHandle // handles [partition]
+	fileHandles map[uint8]*FileHandle // fileHandles[partitionId]
 
-	handlesMux sync.RWMutex
+	handleMutex sync.RWMutex
 
-	BaseDir string
-
-	PartitionCount uint8
-
-	FileGrowth int64 // byte
+	baseDir string
 }
 
 func NewFileManager(baseDir string) *FileManager {
 
 	return &FileManager{
 
-		handles: make(map[uint8]*FileHandle),
+		fileHandles: make(map[uint8]*FileHandle),
 
-		handlesMux: sync.RWMutex{},
+		handleMutex: sync.RWMutex{},
 
-		BaseDir: baseDir, // ./src/storage/database/YYYY/MM/DD/counter_1
-
-		FileGrowth: 64,
+		baseDir: baseDir, // ./database/YYYY/MM/DD/counter_1
 	}
 }
 
-func (fm *FileManager) GetHandle(partition uint8) (*FileHandle, error) {
+func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) {
 
-	fm.handlesMux.RLock()
+	fileManager.handleMutex.RLock()
 
-	if handle, exists := fm.handles[partition]; exists {
+	if handle, exists := fileManager.fileHandles[partition]; exists {
 
-		fm.handlesMux.RUnlock()
+		fileManager.handleMutex.RUnlock()
 
 		return handle, nil
 	}
 
-	fm.handlesMux.RUnlock()
+	fileManager.handleMutex.RUnlock()
 
-	fm.handlesMux.Lock()
+	fileManager.handleMutex.Lock()
 
-	defer fm.handlesMux.Unlock()
+	defer fileManager.handleMutex.Unlock()
 
-	partitionFile := fm.BaseDir + "/partition_" + strconv.Itoa(int(partition)) + ".bin"
+	partitionFile := fileManager.baseDir + "/partition_" + strconv.Itoa(int(partition)) + ".bin"
 
-	if err := os.MkdirAll(fm.BaseDir, 0755); err != nil {
+	if err := os.MkdirAll(fileManager.baseDir, 0755); err != nil {
 
 		return nil, err
 	}
@@ -81,7 +76,7 @@ func (fm *FileManager) GetHandle(partition uint8) (*FileHandle, error) {
 
 	if err != nil {
 
-		file.Close()
+		err := file.Close()
 
 		return nil, err
 	}
@@ -101,12 +96,12 @@ func (fm *FileManager) GetHandle(partition uint8) (*FileHandle, error) {
 
 	handle.MmapData = data
 
-	fm.handles[partition] = handle
+	fileManager.fileHandles[partition] = handle
 
 	return handle, nil
 }
 
-func (fm *FileManager) EnsureCapacity(handle *FileHandle, requiredSize int64) error {
+func (fileManager *FileManager) CheckCapacity(handle *FileHandle, requiredSize int64) error {
 
 	handle.Lock.Lock()
 
@@ -125,7 +120,7 @@ func (fm *FileManager) EnsureCapacity(handle *FileHandle, requiredSize int64) er
 		}
 	}
 
-	handle.AvailableSize = handle.Offset + fm.FileGrowth // just 64 byte adding
+	handle.AvailableSize = handle.Offset + GetFileGrowthSize()
 
 	if err := handle.File.Truncate(handle.AvailableSize); err != nil {
 

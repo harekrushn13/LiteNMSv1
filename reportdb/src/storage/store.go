@@ -3,53 +3,49 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
-	. "reportdb/src/storage/helper"
-	. "reportdb/src/utils"
+	. "reportdb/storage/helper"
+	. "reportdb/utils"
 )
 
-type StorageEngine struct {
-	fileCfg *FileManager
+type StoreEngine struct {
+	fileManager *FileManager
 
-	indexCfg *IndexManager
+	indexManager *IndexManager
 
-	PartitionCount uint8
-
-	BaseDir string // ex. ./src/storage/database/YYYY/MM/DD/counter_1
+	baseDir string // ex. ./src/storage/database/YYYY/MM/DD/counter_1
 
 	isUsedPut bool
 
 	lastSave int64
 }
 
-func NewStorageEngine(baseDir string) *StorageEngine {
+func NewStorageEngine(baseDir string) *StoreEngine {
 
-	return &StorageEngine{
-		fileCfg: NewFileManager(baseDir),
+	return &StoreEngine{
+		fileManager: NewFileManager(baseDir),
 
-		indexCfg: NewIndexManager(baseDir, 3),
+		indexManager: NewIndexManager(baseDir),
 
-		BaseDir: baseDir,
-
-		PartitionCount: 3,
+		baseDir: baseDir,
 	}
 }
 
-func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) error {
+func (store *StoreEngine) Put(objectId uint32, timestamp uint32, data []byte) error {
 
 	store.isUsedPut = true
 
-	fileId := GetPartition(objectId, store.PartitionCount)
+	fileId := getPartitionId(objectId)
 
-	handle, err := store.fileCfg.GetHandle(fileId)
+	handle, err := store.fileManager.GetHandle(fileId)
 
 	if err != nil {
 
-		return err
+		return fmt.Errorf("fileManager.GetHandle(%d): %v", fileId, err)
 	}
 
-	if err := store.fileCfg.EnsureCapacity(handle, int64(len(data))); err != nil {
+	if err := store.fileManager.CheckCapacity(handle, int64(len(data))); err != nil {
 
-		return err
+		return fmt.Errorf("fileManager.CheckCapacity(%d): %v", fileId, err)
 	}
 
 	handle.Lock.Lock()
@@ -62,30 +58,30 @@ func (store *StorageEngine) Put(objectId uint32, timestamp uint32, data []byte) 
 
 	handle.Offset += int64(len(data))
 
-	store.indexCfg.Update(objectId, offset, timestamp, fileId)
+	store.indexManager.Update(objectId, offset, timestamp, fileId)
 
 	return nil
 }
 
-func (store *StorageEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte, error) {
+func (store *StoreEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte, error) {
 
-	fileId := GetPartition(objectId, store.PartitionCount)
+	fileId := getPartitionId(objectId)
 
-	entryList, err := store.indexCfg.GetIndexMapEntryList(objectId, fileId)
+	entryList, err := store.indexManager.GetIndexMapEntryList(objectId, fileId)
 
 	if err != nil {
 
-		return nil, fmt.Errorf("get index map error: %v", err)
+		return nil, fmt.Errorf("store.indexManager.GetIndexMapEntryList error: %v", err)
 	}
 
-	validOffsets, err := store.indexCfg.GetValidOffsets(entryList, from, to)
+	validOffsets, err := store.indexManager.GetValidOffsets(entryList, from, to)
 
 	if err != nil {
 
 		return nil, fmt.Errorf("failed to get valid offsets: %v", err)
 	}
 
-	handle, err := store.fileCfg.GetHandle(fileId)
+	handle, err := store.fileManager.GetHandle(fileId)
 
 	if err != nil {
 
@@ -120,4 +116,9 @@ func (store *StorageEngine) Get(objectId uint32, from uint32, to uint32) ([][]by
 	}
 
 	return dayResults, nil
+}
+
+func getPartitionId(objectID uint32) uint8 {
+
+	return uint8(objectID % uint32(GetPartitions()))
 }

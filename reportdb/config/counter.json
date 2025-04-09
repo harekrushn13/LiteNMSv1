@@ -1,0 +1,14 @@
+{
+  "1": {
+    "name": "qwe.asd.abc",
+    "type": "uint64"
+  },
+  "2": {
+    "name": "qwe.asd.pqr",
+    "type": "float64"
+  },
+  "3": {
+    "name": "qwe.asd.xyz",
+    "type": "string"
+  }
+}

@@ -1,111 +1,170 @@
 package writer
 
 import (
+	"encoding/binary"
+	"fmt"
 	"log"
-	. "reportdb/config"
-	. "reportdb/src/storage"
-	. "reportdb/src/utils"
+	"math"
+	. "reportdb/storage"
+	. "reportdb/utils"
 	"strconv"
 	"sync"
 	"time"
 )
 
-type WriterPool struct {
-	writers []*Writer
-
-	pollCh <-chan []RowData
-
-	writerChannels []chan RowData
-}
-
 type Writer struct {
-	ID uint8
+	id uint8
 
-	TaskQueue <-chan RowData
+	taskQueue chan RowData
 
-	storePool *StorageEnginePool
+	storePool *StorePool
 
-	wg *sync.WaitGroup
+	waitGroup *sync.WaitGroup
 }
 
-func NewWriterPool(ch <-chan []RowData, writerCount uint8) *WriterPool {
+func StartWriter(pollChannel <-chan []RowData, waitGroup *sync.WaitGroup, storePool *StorePool) {
 
-	return &WriterPool{
+	writers := make([]*Writer, GetWriters())
 
-		writers: make([]*Writer, writerCount),
+	for i := range writers {
 
-		pollCh: ch,
+		writers[i] = &Writer{
 
-		writerChannels: make([]chan RowData, writerCount),
-	}
-}
+			id: uint8(i),
 
-func (wp *WriterPool) StartWriter(writerCount uint8, baseDir string, wg *sync.WaitGroup, sp *StorageEnginePool) {
+			taskQueue: make(chan RowData, GetWriterTaskQueueBuffer()),
 
-	for i := uint8(0); i < writerCount; i++ {
+			storePool: storePool,
 
-		wp.writerChannels[i] = make(chan RowData, 50)
-
-		wp.writers[i] = &Writer{
-
-			ID: i,
-
-			TaskQueue: wp.writerChannels[i],
-
-			storePool: sp,
-
-			wg: wg,
+			waitGroup: waitGroup,
 		}
-
-		wg.Add(1)
-
-		go wp.writers[i].runWorker(baseDir)
 	}
 
-	go func(writerCount uint8) {
+	for _, writer := range writers {
 
-		for batch := range wp.pollCh {
+		writer.runWriter()
+	}
+
+	waitGroup.Add(1)
+
+	go func(writers []*Writer) {
+
+		defer waitGroup.Done()
+
+		for batch := range pollChannel {
 
 			for _, row := range batch {
 
-				writerIdx := uint8((uint32(row.CounterId) + row.ObjectId) % uint32(writerCount))
+				index := uint8((uint32(row.CounterId) + row.ObjectId) % uint32(GetWriters()))
 
-				wp.writerChannels[writerIdx] <- row
+				writers[index].taskQueue <- row
 			}
 		}
 
-		for _, ch := range wp.writerChannels {
+		for _, writer := range writers {
 
-			close(ch)
+			close(writer.taskQueue)
 		}
-	}(writerCount)
+
+	}(writers)
+
 }
 
-func (w *Writer) runWorker(baseDir string) {
+func (writer *Writer) runWriter() {
 
-	defer w.wg.Done()
+	writer.waitGroup.Add(1)
 
-	for row := range w.TaskQueue {
+	go func() {
 
-		day := time.Unix(int64(row.Timestamp), 0).Truncate(24 * time.Hour).UTC()
+		defer writer.waitGroup.Done()
 
-		path := baseDir + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
+		for row := range writer.taskQueue {
 
-		store := w.storePool.GetEngine(path)
+			day := time.Unix(int64(row.Timestamp), 0).Truncate(24 * time.Hour).UTC()
 
-		data, err := EncodeData(row)
+			path := GetProjectPath() + "/database/" + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
 
-		if err != nil {
+			store := writer.storePool.GetEngine(path)
 
-			log.Printf("failed to encode data: %w", err)
+			data, err := encodeData(row)
+
+			if err != nil {
+
+				log.Printf("failed to encode data: %s", err)
+			}
+
+			err = store.Put(row.ObjectId, row.Timestamp, data)
+
+			if err != nil {
+
+				log.Printf("failed to write data: %s", err)
+			}
+
 		}
 
-		err = store.Put(row.ObjectId, row.Timestamp, data)
+		return
+	}()
+}
 
-		if err != nil {
+func encodeData(row RowData) ([]byte, error) {
 
-			log.Printf("failed to write data: %w", err)
+	dataType := GetCounterType(row.CounterId)
+
+	switch dataType {
+
+	case TypeUint64:
+
+		val, ok := row.Value.(uint64)
+
+		if !ok {
+
+			return nil, fmt.Errorf("invalid uint64 value for counter %d", row.CounterId)
 		}
 
+		data := make([]byte, 4+8)
+
+		binary.LittleEndian.PutUint32(data, 8)
+
+		binary.LittleEndian.PutUint64(data[4:], val)
+
+		return data, nil
+
+	case TypeFloat64:
+
+		val, ok := row.Value.(float64)
+
+		if !ok {
+
+			return nil, fmt.Errorf("invalid float64 value for counter %d", row.CounterId)
+		}
+
+		data := make([]byte, 4+8)
+
+		binary.LittleEndian.PutUint32(data, 8)
+
+		binary.LittleEndian.PutUint64(data[4:], math.Float64bits(val))
+
+		return data, nil
+
+	case TypeString:
+
+		str, ok := row.Value.(string)
+
+		if !ok {
+
+			return nil, fmt.Errorf("invalid string value for counter %d", row.CounterId)
+		}
+
+		data := make([]byte, 4+len(str))
+
+		binary.LittleEndian.PutUint32(data, uint32(len(str)))
+
+		copy(data[4:], str)
+
+		return data, nil
+
+	default:
+
+		return nil, fmt.Errorf("unsupported data type: %d", dataType)
 	}
 }

@@ -1,162 +1,157 @@
 package reader
 
 import (
+	"encoding/binary"
 	"fmt"
-	. "reportdb/config"
-	. "reportdb/src/storage"
-	. "reportdb/src/utils"
+	"log"
+	"math"
+	. "reportdb/storage"
+	. "reportdb/utils"
 	"strconv"
 	"sync"
 	"time"
 )
 
 type Query struct {
-	counterID uint16
+	counterId uint16
 
-	objectID uint32
+	objectId uint32
 
 	from uint32
 
 	to uint32
-
-	baseDir string // ./src/storage/database/
 }
 
-type ReaderPool struct {
-	readers []*Reader
-}
-
-type Reader struct {
-	storePool *StorageEnginePool
-
-	wg *sync.WaitGroup
-}
-
-func NewReaderPool(readerCount uint8) *ReaderPool {
-
-	return &ReaderPool{
-
-		readers: make([]*Reader, readerCount),
-	}
-}
-
-func NewQuery(counterID uint16, objectID uint32, from uint32, to uint32, baseDir string) *Query {
+func NewQuery(counterID uint16, objectID uint32, from uint32, to uint32) *Query {
 
 	return &Query{
 
-		counterID: counterID,
+		counterId: counterID,
 
-		objectID: objectID,
+		objectId: objectID,
 
 		from: from,
 
 		to: to,
-
-		baseDir: baseDir,
 	}
 }
 
-func (rp *ReaderPool) StartReader(readerCount uint8, baseDir string, wg *sync.WaitGroup, sp *StorageEnginePool) {
+type Reader struct {
+	storePool *StorePool
 
-	for i := uint8(0); i < readerCount; i++ {
-
-		rp.readers[i] = &Reader{
-
-			storePool: sp,
-
-			wg: wg,
-		}
-
-		wg.Add(1)
-
-		go rp.readers[i].runReader(baseDir)
-	}
+	waitGroup *sync.WaitGroup
 }
 
-func (r *Reader) runReader(baseDir string) {
+func StartReader(waitGroup *sync.WaitGroup, storePool *StorePool) {
 
-	defer r.wg.Done()
+	readers := make([]*Reader, GetReaders())
 
-	to := time.Now().Unix()
+	for i := range GetReaders() {
 
-	ticker := time.NewTicker(time.Second)
+		readers[i] = &Reader{
 
-	defer ticker.Stop()
+			storePool: storePool,
 
-	stopTime := time.NewTicker(12 * time.Second)
-
-	defer stopTime.Stop()
-
-	for {
-		select {
-
-		case <-ticker.C:
-			//query := NewQuery(3, 3, uint32(to), uint32(to)+7, baseDir)
-			query := NewQuery(3, 3, 1744019287, uint32(to)+10, baseDir)
-
-			query.runQuery(r.storePool)
-
-		case <-stopTime.C:
-
-			return
+			waitGroup: waitGroup,
 		}
 	}
 
+	for _, reader := range readers {
+
+		reader.runReader()
+	}
+
 }
 
-func (q *Query) runQuery(sp *StorageEnginePool) {
+func (reader *Reader) runReader() {
 
-	v, err := q.fetchData(sp)
+	reader.waitGroup.Add(1)
+
+	go func() {
+
+		defer reader.waitGroup.Done()
+
+		today := time.Now().Unix()
+
+		ticker := time.NewTicker(time.Second)
+
+		defer ticker.Stop()
+
+		stopTime := time.NewTicker(60 * time.Second)
+
+		defer stopTime.Stop()
+
+		for {
+			select {
+
+			case <-ticker.C:
+				//query := NewQuery(3, 3, uint32(today), uint32(today)+7, baseDir)
+
+				NewQuery(3, 3, 1744019287, uint32(today)+10).runQuery(reader.storePool)
+
+			case <-stopTime.C:
+
+				return
+			}
+		}
+
+	}()
+
+}
+
+func (query *Query) runQuery(storePool *StorePool) {
+
+	results, err := query.fetchData(storePool)
 
 	if err != nil {
 
+		//log.Printf("query.runQuery : Error fetching data for query %d: %s", query.objectId, err)
 		fmt.Println(err)
 	}
 
-	fmt.Printf("%#v\n", v)
+	fmt.Printf("%#v\n", results)
 
 }
 
-func (q *Query) fetchData(sp *StorageEnginePool) ([]interface{}, error) {
+func (query *Query) fetchData(storePool *StorePool) ([]interface{}, error) {
 
-	dataType, exists := CounterTypeMapping[q.counterID]
+	dataType := GetCounterType(query.counterId)
 
-	if !exists {
+	fromTime := time.Unix(int64(query.from), 0).Truncate(24 * time.Hour).UTC()
 
-		return nil, fmt.Errorf("unknown counter ID: %d", q.counterID)
-	}
-
-	fromTime := time.Unix(int64(q.from), 0).Truncate(24 * time.Hour).UTC()
-
-	toTime := time.Unix(int64(q.to), 0).Truncate(24 * time.Hour).UTC()
+	toTime := time.Unix(int64(query.to), 0).Truncate(24 * time.Hour).UTC()
 
 	var results []interface{}
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
-		path := q.baseDir + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(q.counterID))
+		path := GetProjectPath() + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.counterId))
 
-		store := sp.GetEngine(path)
+		store := storePool.GetEngine(path)
 
 		if store == nil {
 
-			fmt.Println("store is nil", current.Format("2006/01/02"))
+			log.Printf("store is nil %s", current.Format("2006/01/02"))
 
 			continue
 		}
 
-		data, err := store.Get(q.objectID, q.from, q.to)
+		dayResult, err := store.Get(query.objectId, query.from, query.to)
 
 		if err != nil {
 
+			log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
+
 			continue
 		}
 
-		for _, val := range data {
+		for _, data := range dayResult {
 
-			value, err := DecodeData(val, dataType)
+			value, err := decodeData(data, dataType)
 
 			if err != nil {
+
+				log.Printf("decodeData error %s %s", current.Format("2006/01/02"), err)
 
 				continue
 			}
@@ -167,8 +162,34 @@ func (q *Query) fetchData(sp *StorageEnginePool) ([]interface{}, error) {
 
 	if len(results) == 0 {
 
-		return nil, fmt.Errorf("no data found in time range %d-%d", q.from, q.to)
+		return nil, fmt.Errorf("no data found in time range %d-%d", query.from, query.to)
 	}
 
 	return results, nil
+}
+
+func decodeData(data []byte, dataType DataType) (interface{}, error) {
+
+	var value interface{}
+
+	switch dataType {
+
+	case TypeUint64:
+
+		value = binary.LittleEndian.Uint64(data)
+
+	case TypeFloat64:
+
+		value = math.Float64frombits(binary.LittleEndian.Uint64(data))
+
+	case TypeString:
+
+		value = string(data)
+
+	default:
+
+		return nil, fmt.Errorf("unsupported data type: %T", dataType)
+	}
+
+	return value, nil
 }

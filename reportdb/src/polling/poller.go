@@ -3,44 +3,33 @@ package polling
 import (
 	"fmt"
 	"math/rand"
-	. "reportdb/config"
+	. "reportdb/utils"
+	"sync"
 	"time"
 )
 
-type PollerEngine struct {
-	PollInterval time.Duration
-
-	BatchTime time.Duration
-
-	StopTime time.Duration
-}
-
-func NewPollerEngine() *PollerEngine {
-
-	return &PollerEngine{
-		PollInterval: 1 * time.Second,
-
-		BatchTime: 2500 * time.Millisecond,
-
-		StopTime: 10 * time.Second,
-	}
-}
-
-func (poller *PollerEngine) PollData(gobalCfg *GlobalConfig) <-chan []RowData {
+func PollData(waitGroup *sync.WaitGroup) <-chan []RowData {
 
 	out := make(chan []RowData)
 
+	waitGroup.Add(1)
+
 	go func() {
 
-		ticker := time.NewTicker(poller.PollInterval)
+		defer waitGroup.Done()
+
+		//ticker := time.NewTicker(time.Duration(GetPollingInterval()) * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 
 		defer ticker.Stop()
 
-		batchTicker := time.NewTicker(poller.BatchTime)
+		//batchTicker := time.NewTicker(time.Duration(GetBatchInterval()) * time.Millisecond)
+		batchTicker := time.NewTicker(2500 * time.Millisecond)
 
 		defer batchTicker.Stop()
 
-		stopTimer := time.NewTimer(poller.StopTime)
+		//stopTimer := time.NewTimer(time.Duration(GetStopTime()) * time.Second)
+		stopTimer := time.NewTimer(60 * time.Second)
 
 		defer stopTimer.Stop()
 
@@ -52,15 +41,15 @@ func (poller *PollerEngine) PollData(gobalCfg *GlobalConfig) <-chan []RowData {
 
 			case <-ticker.C:
 
-				t := time.Now().Unix()
+				timestamp := time.Now().Unix()
 
-				for objectID := uint32(1); objectID <= gobalCfg.ObjectCount; objectID++ {
+				for objectId := uint32(1); objectId <= GetObjects(); objectId++ {
 
-					for counterID := uint16(1); counterID <= gobalCfg.CounterCount; counterID++ {
+					for counterId := uint16(1); counterId <= GetCounters(); counterId++ {
 
 						var value interface{}
 
-						switch CounterTypeMapping[counterID] {
+						switch GetCounterType(counterId) {
 
 						case TypeUint64:
 
@@ -77,16 +66,16 @@ func (poller *PollerEngine) PollData(gobalCfg *GlobalConfig) <-chan []RowData {
 
 						batch = append(batch, RowData{
 
-							ObjectId: objectID,
+							ObjectId: objectId,
 
-							CounterId: counterID,
+							CounterId: counterId,
 
-							Timestamp: uint32(t),
+							Timestamp: uint32(timestamp),
 
 							Value: value,
 						})
 
-						if counterID == 3 && objectID == 3 {
+						if counterId == 3 && objectId == 3 {
 
 							fmt.Println(batch[len(batch)-1])
 						}
