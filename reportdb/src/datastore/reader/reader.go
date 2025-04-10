@@ -44,9 +44,16 @@ type Reader struct {
 
 func StartReader(waitGroup *sync.WaitGroup, storePool *StorePool) {
 
-	readers := make([]*Reader, GetReaders())
+	numReaders, err := GetReaders()
 
-	for i := range GetReaders() {
+	if err != nil {
+
+		log.Fatal(err)
+	}
+
+	readers := make([]*Reader, numReaders)
+
+	for i := range numReaders {
 
 		readers[i] = &Reader{
 
@@ -77,7 +84,14 @@ func (reader *Reader) runReader() {
 
 		defer ticker.Stop()
 
-		stopTime := time.NewTicker(60 * time.Second)
+		stopIndexTime, err := GetStopIndexSaving()
+
+		if err != nil {
+
+			log.Fatal(err)
+		}
+
+		stopTime := time.NewTicker(time.Duration(stopIndexTime) * time.Second)
 
 		defer stopTime.Stop()
 
@@ -87,7 +101,7 @@ func (reader *Reader) runReader() {
 			case <-ticker.C:
 				//query := NewQuery(3, 3, uint32(today), uint32(today)+7, baseDir)
 
-				NewQuery(3, 3, 1744019287, uint32(today)+10).runQuery(reader.storePool)
+				NewQuery(3, 3, uint32(today), uint32(today)+12).runQuery(reader.storePool)
 
 			case <-stopTime.C:
 
@@ -115,7 +129,12 @@ func (query *Query) runQuery(storePool *StorePool) {
 
 func (query *Query) fetchData(storePool *StorePool) ([]interface{}, error) {
 
-	dataType := GetCounterType(query.counterId)
+	dataType, err := GetCounterType(query.counterId)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("reader.fetchData error : %v", err)
+	}
 
 	fromTime := time.Unix(int64(query.from), 0).Truncate(24 * time.Hour).UTC()
 
@@ -125,13 +144,20 @@ func (query *Query) fetchData(storePool *StorePool) ([]interface{}, error) {
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
-		path := GetProjectPath() + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.counterId))
+		workingDirectory, err := GetWorkingDirectory()
 
-		store := storePool.GetEngine(path)
+		if err != nil {
 
-		if store == nil {
+			return nil, fmt.Errorf("reader.fetchData error : %v", err)
+		}
 
-			log.Printf("store is nil %s", current.Format("2006/01/02"))
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.counterId))
+
+		store, error := storePool.GetEngine(path, false)
+
+		if error != nil {
+
+			log.Printf("reader.fetchData error : %v", error)
 
 			continue
 		}

@@ -1,5 +1,5 @@
 {
-  "pollingInterval" : 1,
+  "pollingInterval": 1,
   "batchInterval": 2500,
   "stopPolling": 10
 }

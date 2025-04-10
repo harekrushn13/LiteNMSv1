@@ -10,12 +10,6 @@ import (
 	"sync"
 )
 
-type IndexEntry struct {
-	TimeStamp uint32 `json:"timestamp"`
-
-	Offset int64 `json:"offset"`
-}
-
 type IndexManager struct {
 	indexHandles map[uint8]*IndexHandle // indexHandles[indexId]
 
@@ -25,9 +19,15 @@ type IndexManager struct {
 }
 
 type IndexHandle struct {
-	indexMapping map[uint32][]*IndexEntry // IndexMap[objectID][]*IndexEntry
+	indexMapping map[uint32][]*IndexEntry // IndexMap[key][]*IndexEntry
 
 	indexMutex *sync.RWMutex
+}
+
+type IndexEntry struct {
+	TimeStamp uint32 `json:"timestamp"`
+
+	Offset int64 `json:"offset"`
 }
 
 func NewIndexManager(baseDir string) *IndexManager {
@@ -42,7 +42,7 @@ func NewIndexManager(baseDir string) *IndexManager {
 	}
 }
 
-func (indexManager *IndexManager) Update(objectID uint32, offset int64, timestamp uint32, indexId uint8) {
+func (indexManager *IndexManager) Update(key uint32, offset int64, timestamp uint32, indexId uint8) {
 
 	indexHandle := indexManager.getIndexHandle(indexId)
 
@@ -50,44 +50,80 @@ func (indexManager *IndexManager) Update(objectID uint32, offset int64, timestam
 
 	defer indexHandle.indexMutex.Unlock()
 
-	entryList, exists := indexHandle.indexMapping[objectID]
+	entryList, exists := indexHandle.indexMapping[key]
 
-	if !exists {
+	if exists {
+
+		indexHandle.indexMapping[key] = append(entryList, &IndexEntry{TimeStamp: timestamp, Offset: offset})
+
+		return
+	}
+
+	if len(indexHandle.indexMapping) == 0 {
 
 		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".json"
 
-		if _, err := os.Stat(indexFilePath); err == nil {
+		err := loadIndexFile(indexFilePath, indexHandle, indexId)
 
-			data, err := os.ReadFile(indexFilePath)
+		if err != nil {
 
-			if err != nil {
+			log.Printf("indexManager.loadIndexFile error: %v", err)
 
-				log.Printf("Error reading index file: %v", err)
-
-				return
-			}
-
-			if err := json.Unmarshal(data, &indexHandle.indexMapping); err != nil {
-
-				log.Printf("Error parsing index map: %v", err)
-
-				return
-			}
-
-			entryList, _ = indexHandle.indexMapping[objectID]
-
-			indexHandle.indexMapping[objectID] = append(entryList, &IndexEntry{TimeStamp: timestamp, Offset: offset})
-
-		} else {
-
-			indexHandle.indexMapping[objectID] = []*IndexEntry{{TimeStamp: timestamp, Offset: offset}}
+			return
 		}
 
-	} else {
+		if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
 
-		indexHandle.indexMapping[objectID] = append(entryList, &IndexEntry{TimeStamp: timestamp, Offset: offset})
+			log.Printf("Error creating index directory: %v", err)
+
+			return
+		}
+
 	}
 
+	indexHandle.indexMapping[key] = append(indexHandle.indexMapping[key], &IndexEntry{TimeStamp: timestamp, Offset: offset})
+
+}
+
+func (indexManager *IndexManager) GetIndexMapEntryList(objectId uint32, indexId uint8) ([]*IndexEntry, error) {
+
+	indexHandle := indexManager.getIndexHandle(indexId)
+
+	indexHandle.indexMutex.RLock()
+
+	entryList, exists := indexHandle.indexMapping[objectId]
+
+	indexHandle.indexMutex.RUnlock()
+
+	if exists {
+
+		return entryList, nil
+	}
+
+	indexHandle.indexMutex.Lock()
+
+	defer indexHandle.indexMutex.Unlock()
+
+	if entryList, exists = indexHandle.indexMapping[objectId]; exists {
+
+		return entryList, nil
+	}
+
+	if len(indexHandle.indexMapping) == 0 {
+
+		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".json"
+
+		err := loadIndexFile(indexFilePath, indexHandle, indexId)
+
+		if err != nil {
+
+			return nil, fmt.Errorf("indexManager.loadIndexFile error: %v", err)
+		}
+	}
+
+	entryList, exists = indexHandle.indexMapping[objectId]
+
+	return entryList, nil
 }
 
 func (indexManager *IndexManager) getIndexHandle(indexId uint8) *IndexHandle {
@@ -96,18 +132,21 @@ func (indexManager *IndexManager) getIndexHandle(indexId uint8) *IndexHandle {
 
 	handle, exists := indexManager.indexHandles[indexId]
 
-	if exists {
+	indexManager.handleMutex.RUnlock()
 
-		indexManager.handleMutex.RUnlock()
+	if exists {
 
 		return handle
 	}
 
-	indexManager.handleMutex.RUnlock()
-
 	indexManager.handleMutex.Lock()
 
 	defer indexManager.handleMutex.Unlock()
+
+	if handle, exists = indexManager.indexHandles[indexId]; exists {
+
+		return handle
+	}
 
 	indexManager.indexHandles[indexId] = &IndexHandle{
 
@@ -119,42 +158,67 @@ func (indexManager *IndexManager) getIndexHandle(indexId uint8) *IndexHandle {
 	return indexManager.indexHandles[indexId]
 }
 
-func (indexManager *IndexManager) GetIndexMapEntryList(objectId uint32, indexId uint8) ([]*IndexEntry, error) {
+func loadIndexFile(indexFilePath string, handle *IndexHandle, indexId uint8) error {
 
-	indexHandle := indexManager.getIndexHandle(indexId)
+	if _, err := os.Stat(indexFilePath); err != nil {
 
-	indexHandle.indexMutex.Lock()
+		return nil
+	}
 
-	defer indexHandle.indexMutex.Unlock()
+	data, err := os.ReadFile(indexFilePath)
 
-	if len(indexHandle.indexMapping[objectId]) == 0 || indexHandle.indexMapping[objectId] == nil {
+	if err != nil {
 
-		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".json"
+		return fmt.Errorf("error reading index file: %v", err)
+	}
 
-		if _, err := os.Stat(indexFilePath); err == nil {
+	if err := json.Unmarshal(data, &handle.indexMapping); err != nil {
 
-			data, err := os.ReadFile(indexFilePath)
+		return fmt.Errorf("error parsing index map: %v", err)
+	}
 
-			if err != nil {
+	return nil
+}
 
-				return nil, fmt.Errorf("failed to read index file: %v", err)
-			}
+func (indexManager *IndexManager) Save() error {
 
-			if err := json.Unmarshal(data, &indexHandle.indexMapping); err != nil {
+	indexManager.handleMutex.Lock()
 
-				return nil, fmt.Errorf("failed to parse index file: %v", err)
-			}
+	defer indexManager.handleMutex.Unlock()
+
+	for index, handle := range indexManager.indexHandles {
+
+		handle.indexMutex.Lock()
+
+		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(index)) + ".json"
+
+		if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
+
+			handle.indexMutex.Unlock()
+
+			return err
 		}
+
+		data, err := json.MarshalIndent(handle.indexMapping, "", "  ")
+
+		if err != nil {
+
+			handle.indexMutex.Unlock()
+
+			return err
+		}
+
+		if err := os.WriteFile(indexFilePath, data, 0644); err != nil {
+
+			handle.indexMutex.Unlock()
+
+			return err
+		}
+
+		handle.indexMutex.Unlock()
 	}
 
-	entryList, exists := indexHandle.indexMapping[objectId]
-
-	if !exists {
-
-		return nil, fmt.Errorf("get index map error")
-	}
-
-	return entryList, nil
+	return nil
 }
 
 func (indexManager *IndexManager) GetValidOffsets(entryList []*IndexEntry, from uint32, to uint32) ([]int64, error) {
@@ -238,39 +302,4 @@ func customBinarySearch(entries []*IndexEntry, condition func(uint32) bool, sear
 	}
 
 	return result
-}
-
-func (indexManager *IndexManager) Save() error {
-
-	indexManager.handleMutex.Lock()
-
-	defer indexManager.handleMutex.Unlock()
-
-	for index, handle := range indexManager.indexHandles {
-
-		handle.indexMutex.Lock()
-
-		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(index)) + ".json"
-
-		if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
-
-			return err
-		}
-
-		data, err := json.MarshalIndent(handle.indexMapping, "", "  ")
-
-		if err != nil {
-
-			return err
-		}
-
-		if err := os.WriteFile(indexFilePath, data, 0644); err != nil {
-
-			return err
-		}
-
-		handle.indexMutex.Unlock()
-	}
-
-	return nil
 }

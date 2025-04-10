@@ -1,9 +1,7 @@
 {
-  "writers" : 3,
-  "readers" : 1,
-  "objects" : 5,
-  "counters": 3,
+  "writers": 3,
+  "readers": 1,
   "partitions": 3,
-  "writerTaskQueueBuffer": 50,
+  "writerEventBuffer": 50,
   "fileGrowthSize": 64
 }

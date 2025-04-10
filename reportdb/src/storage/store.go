@@ -12,7 +12,7 @@ type StoreEngine struct {
 
 	indexManager *IndexManager
 
-	baseDir string // ex. ./src/storage/database/YYYY/MM/DD/counter_1
+	baseDir string // ex. /reportdb/database/YYYY/MM/DD/counter_1
 
 	isUsedPut bool
 
@@ -30,11 +30,16 @@ func NewStorageEngine(baseDir string) *StoreEngine {
 	}
 }
 
-func (store *StoreEngine) Put(objectId uint32, timestamp uint32, data []byte) error {
+func (store *StoreEngine) Put(key uint32, timestamp uint32, data []byte) error {
 
 	store.isUsedPut = true
 
-	fileId := getPartitionId(objectId)
+	fileId, err := getPartitionId(key)
+
+	if err != nil {
+
+		return err
+	}
 
 	handle, err := store.fileManager.GetHandle(fileId)
 
@@ -54,20 +59,27 @@ func (store *StoreEngine) Put(objectId uint32, timestamp uint32, data []byte) er
 
 	offset := handle.Offset
 
-	copy(handle.MmapData[offset:], data)
+	binary.LittleEndian.PutUint32(handle.MappedBuffer[:4], uint32(handle.AvailableSize-int64(len(data))))
+
+	copy(handle.MappedBuffer[offset:], data)
 
 	handle.Offset += int64(len(data))
 
-	store.indexManager.Update(objectId, offset, timestamp, fileId)
+	store.indexManager.Update(key, offset, timestamp, fileId)
 
 	return nil
 }
 
-func (store *StoreEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte, error) {
+func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, error) {
 
-	fileId := getPartitionId(objectId)
+	fileId, err := getPartitionId(key)
 
-	entryList, err := store.indexManager.GetIndexMapEntryList(objectId, fileId)
+	if err != nil {
+
+		return nil, err
+	}
+
+	entryList, err := store.indexManager.GetIndexMapEntryList(key, fileId)
 
 	if err != nil {
 
@@ -96,21 +108,21 @@ func (store *StoreEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte
 
 	for _, offset := range validOffsets {
 
-		if offset+4 > int64(len(handle.MmapData)) {
+		if offset+4 > int64(len(handle.MappedBuffer)) {
 
 			return nil, fmt.Errorf("offset %d out of bounds for length prefix", offset)
 		}
 
-		length := binary.LittleEndian.Uint32(handle.MmapData[offset : offset+4])
+		length := binary.LittleEndian.Uint32(handle.MappedBuffer[offset : offset+4])
 
-		if offset+4+int64(length) > int64(len(handle.MmapData)) {
+		if offset+4+int64(length) > int64(len(handle.MappedBuffer)) {
 
 			return nil, fmt.Errorf("record at offset %d extends beyond file bounds", offset)
 		}
 
 		record := make([]byte, length)
 
-		copy(record, handle.MmapData[offset+4:offset+4+int64(length)])
+		copy(record, handle.MappedBuffer[offset+4:offset+4+int64(length)])
 
 		dayResults = append(dayResults, record)
 	}
@@ -118,7 +130,21 @@ func (store *StoreEngine) Get(objectId uint32, from uint32, to uint32) ([][]byte
 	return dayResults, nil
 }
 
-func getPartitionId(objectID uint32) uint8 {
+func getPartitionId(key uint32) (uint8, error) {
 
-	return uint8(objectID % uint32(GetPartitions()))
+	partitions, err := GetPartitions()
+
+	if err != nil {
+
+		return 0, fmt.Errorf("GetPartitions error: %v", err)
+	}
+
+	index := uint8(key % uint32(partitions))
+
+	if index < 0 || index >= partitions {
+
+		return 0, fmt.Errorf("invalid partition index: %d", index)
+	}
+
+	return index, nil
 }

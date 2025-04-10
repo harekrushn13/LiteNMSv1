@@ -1,4 +1,4 @@
-module reportdb
+module poller
 
 go 1.24.0
 

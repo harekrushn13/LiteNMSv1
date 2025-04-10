@@ -18,13 +18,13 @@ type FileHandle struct {
 
 	AvailableSize int64
 
-	MmapData []byte
+	MappedBuffer []byte
 }
 
 type FileManager struct {
 	fileHandles map[uint8]*FileHandle // fileHandles[partitionId]
 
-	handleMutex sync.RWMutex
+	lock sync.RWMutex
 
 	baseDir string
 }
@@ -35,7 +35,7 @@ func NewFileManager(baseDir string) *FileManager {
 
 		fileHandles: make(map[uint8]*FileHandle),
 
-		handleMutex: sync.RWMutex{},
+		lock: sync.RWMutex{},
 
 		baseDir: baseDir, // ./database/YYYY/MM/DD/counter_1
 	}
@@ -43,20 +43,25 @@ func NewFileManager(baseDir string) *FileManager {
 
 func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) {
 
-	fileManager.handleMutex.RLock()
+	fileManager.lock.RLock()
 
-	if handle, exists := fileManager.fileHandles[partition]; exists {
+	handle, exists := fileManager.fileHandles[partition]
 
-		fileManager.handleMutex.RUnlock()
+	fileManager.lock.RUnlock()
+
+	if exists {
 
 		return handle, nil
 	}
 
-	fileManager.handleMutex.RUnlock()
+	fileManager.lock.Lock()
 
-	fileManager.handleMutex.Lock()
+	defer fileManager.lock.Unlock()
 
-	defer fileManager.handleMutex.Unlock()
+	if handle, exists = fileManager.fileHandles[partition]; exists {
+
+		return handle, nil
+	}
 
 	partitionFile := fileManager.baseDir + "/partition_" + strconv.Itoa(int(partition)) + ".bin"
 
@@ -81,20 +86,27 @@ func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) 
 		return nil, err
 	}
 
-	handle := &FileHandle{
+	handle = &FileHandle{
 
 		File: file,
-
-		Offset: fileInfo.Size(),
 
 		AvailableSize: fileInfo.Size(),
 
 		Lock: &sync.RWMutex{},
 	}
 
-	data, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	mappedBuffer, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 
-	handle.MmapData = data
+	if handle.AvailableSize > 0 {
+
+		handle.Offset = fileInfo.Size() - 4
+
+	} else {
+
+		handle.Offset = fileInfo.Size() + 4
+	}
+
+	handle.MappedBuffer = mappedBuffer
 
 	fileManager.fileHandles[partition] = handle
 
@@ -112,29 +124,36 @@ func (fileManager *FileManager) CheckCapacity(handle *FileHandle, requiredSize i
 		return nil
 	}
 
-	if handle.MmapData != nil {
+	if handle.MappedBuffer != nil {
 
-		if err := syscall.Munmap(handle.MmapData); err != nil {
+		if err := syscall.Munmap(handle.MappedBuffer); err != nil {
 
 			return fmt.Errorf("munmap failed: %v", err)
 		}
 	}
 
-	handle.AvailableSize = handle.Offset + GetFileGrowthSize()
+	fileGrowthSize, err := GetFileGrowthSize()
+
+	if err != nil {
+
+		return err
+	}
+
+	handle.AvailableSize = handle.Offset + fileGrowthSize
 
 	if err := handle.File.Truncate(handle.AvailableSize); err != nil {
 
 		return fmt.Errorf("failed to grow file: %v", err)
 	}
 
-	data, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	mappedBuffer, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 
 	if err != nil {
 
 		return fmt.Errorf("mmap failed: %v", err)
 	}
 
-	handle.MmapData = data
+	handle.MappedBuffer = mappedBuffer
 
 	return nil
 }

@@ -15,16 +15,30 @@ import (
 type Writer struct {
 	id uint8
 
-	taskQueue chan RowData
+	events chan Events
 
 	storePool *StorePool
 
 	waitGroup *sync.WaitGroup
 }
 
-func StartWriter(pollChannel <-chan []RowData, waitGroup *sync.WaitGroup, storePool *StorePool) {
+func initializeWriters(waitGroup *sync.WaitGroup, storePool *StorePool) ([]*Writer, error) {
 
-	writers := make([]*Writer, GetWriters())
+	numWriters, err := GetWriters()
+
+	if err != nil {
+
+		return nil, fmt.Errorf("initializeWriters : Error getting writers: %v", err)
+	}
+
+	eventsBuffer, err := GetEventsBuffer()
+
+	if err != nil {
+
+		return nil, fmt.Errorf("initializeWriters : Error getting writers: %v", err)
+	}
+
+	writers := make([]*Writer, numWriters)
 
 	for i := range writers {
 
@@ -32,7 +46,7 @@ func StartWriter(pollChannel <-chan []RowData, waitGroup *sync.WaitGroup, storeP
 
 			id: uint8(i),
 
-			taskQueue: make(chan RowData, GetWriterTaskQueueBuffer()),
+			events: make(chan Events, eventsBuffer),
 
 			storePool: storePool,
 
@@ -40,34 +54,24 @@ func StartWriter(pollChannel <-chan []RowData, waitGroup *sync.WaitGroup, storeP
 		}
 	}
 
+	return writers, nil
+}
+
+func StartWriter(waitGroup *sync.WaitGroup, storePool *StorePool) ([]*Writer, error) {
+
+	writers, err := initializeWriters(waitGroup, storePool)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("StartWriter : Error getting writers: %v", err)
+	}
+
 	for _, writer := range writers {
 
 		writer.runWriter()
 	}
 
-	waitGroup.Add(1)
-
-	go func(writers []*Writer) {
-
-		defer waitGroup.Done()
-
-		for batch := range pollChannel {
-
-			for _, row := range batch {
-
-				index := uint8((uint32(row.CounterId) + row.ObjectId) % uint32(GetWriters()))
-
-				writers[index].taskQueue <- row
-			}
-		}
-
-		for _, writer := range writers {
-
-			close(writer.taskQueue)
-		}
-
-	}(writers)
-
+	return writers, nil
 }
 
 func (writer *Writer) runWriter() {
@@ -78,26 +82,46 @@ func (writer *Writer) runWriter() {
 
 		defer writer.waitGroup.Done()
 
-		for row := range writer.taskQueue {
+		for row := range writer.events {
 
 			day := time.Unix(int64(row.Timestamp), 0).Truncate(24 * time.Hour).UTC()
 
-			path := GetProjectPath() + "/database/" + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
+			workingDirectory, err := GetWorkingDirectory()
 
-			store := writer.storePool.GetEngine(path)
+			if err != nil {
+
+				log.Printf("writer.runWriter : Error getting working directory: %v", err)
+
+				return
+			}
+
+			path := workingDirectory + "/database/" + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
+
+			store, err := writer.storePool.GetEngine(path, true)
+
+			if err != nil {
+
+				log.Printf("writer.runWriter : Error getting store: %v", err)
+
+				return
+			}
 
 			data, err := encodeData(row)
 
 			if err != nil {
 
-				log.Printf("failed to encode data: %s", err)
+				log.Printf("writer.runWriter : failed to encode data: %s", err)
+
+				return
 			}
 
 			err = store.Put(row.ObjectId, row.Timestamp, data)
 
 			if err != nil {
 
-				log.Printf("failed to write data: %s", err)
+				log.Printf("writer.runWriter : failed to write data: %s", err)
+
+				return
 			}
 
 		}
@@ -106,26 +130,33 @@ func (writer *Writer) runWriter() {
 	}()
 }
 
-func encodeData(row RowData) ([]byte, error) {
+func encodeData(row Events) ([]byte, error) {
 
-	dataType := GetCounterType(row.CounterId)
+	dataType, err := GetCounterType(row.CounterId)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("encodeData : Error getting counter type: %v", err)
+	}
 
 	switch dataType {
 
 	case TypeUint64:
 
-		val, ok := row.Value.(uint64)
+		val, ok := row.Value.(float64)
 
 		if !ok {
 
-			return nil, fmt.Errorf("invalid uint64 value for counter %d", row.CounterId)
+			return nil, fmt.Errorf("encodeData : invalid uint64 value for counter %d", row.CounterId)
 		}
 
-		data := make([]byte, 4+8)
+		newvalue := uint64(val)
+
+		data := make([]byte, 12)
 
 		binary.LittleEndian.PutUint32(data, 8)
 
-		binary.LittleEndian.PutUint64(data[4:], val)
+		binary.LittleEndian.PutUint64(data[4:], newvalue)
 
 		return data, nil
 
@@ -135,10 +166,10 @@ func encodeData(row RowData) ([]byte, error) {
 
 		if !ok {
 
-			return nil, fmt.Errorf("invalid float64 value for counter %d", row.CounterId)
+			return nil, fmt.Errorf("encodeData : invalid float64 value for counter %d", row.CounterId)
 		}
 
-		data := make([]byte, 4+8)
+		data := make([]byte, 12)
 
 		binary.LittleEndian.PutUint32(data, 8)
 
@@ -152,7 +183,7 @@ func encodeData(row RowData) ([]byte, error) {
 
 		if !ok {
 
-			return nil, fmt.Errorf("invalid string value for counter %d", row.CounterId)
+			return nil, fmt.Errorf("encodeData : invalid string value for counter %d", row.CounterId)
 		}
 
 		data := make([]byte, 4+len(str))
@@ -165,6 +196,6 @@ func encodeData(row RowData) ([]byte, error) {
 
 	default:
 
-		return nil, fmt.Errorf("unsupported data type: %d", dataType)
+		return nil, fmt.Errorf("encodeData : unsupported data type: %d", dataType)
 	}
 }

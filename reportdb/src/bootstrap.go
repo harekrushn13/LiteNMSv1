@@ -4,13 +4,17 @@ import (
 	"log"
 	. "reportdb/datastore/reader"
 	. "reportdb/datastore/writer"
-	. "reportdb/polling"
+	. "reportdb/server"
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"sync"
 )
 
 func main() {
+
+	//signalChannel := make(chan os.Signal, 1)
+	//
+	//signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	var waitGroup sync.WaitGroup
 
@@ -21,15 +25,34 @@ func main() {
 		log.Fatal(err)
 	}
 
+	dataChannel := make(chan []Events, 10)
+
+	err = ZMQServer(dataChannel, &waitGroup)
+
+	if err != nil {
+
+		log.Fatal(err)
+	}
+
 	storePool := NewStorePool()
 
-	pollChannel := PollData(&waitGroup)
+	writers, err := StartWriter(&waitGroup, storePool)
 
-	StartWriter(pollChannel, &waitGroup, storePool)
+	if err != nil {
+
+		log.Fatal(err)
+	}
+
+	DistributeData(dataChannel, writers, &waitGroup)
 
 	StartReader(&waitGroup, storePool)
 
-	storePool.SaveEngine(&waitGroup)
+	err = storePool.SaveEngine(&waitGroup)
+
+	if err != nil {
+
+		log.Fatal(err)
+	}
 
 	waitGroup.Wait()
 }

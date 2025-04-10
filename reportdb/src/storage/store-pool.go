@@ -1,7 +1,10 @@
 package storage
 
 import (
+	"fmt"
 	"log"
+	"os"
+	. "reportdb/utils"
 	"sync"
 	"time"
 )
@@ -9,7 +12,7 @@ import (
 type StorePool struct {
 	storePool map[string]*StoreEngine // map["./database/YYYY/MM/DD/counter_1"]
 
-	poolMutex sync.RWMutex
+	poolMutex *sync.RWMutex
 }
 
 func NewStorePool() *StorePool {
@@ -17,10 +20,14 @@ func NewStorePool() *StorePool {
 	return &StorePool{
 
 		storePool: make(map[string]*StoreEngine),
+
+		poolMutex: &sync.RWMutex{},
 	}
 }
 
-func (storePool *StorePool) GetEngine(path string) *StoreEngine {
+func (storePool *StorePool) GetEngine(path string, isForPut bool) (*StoreEngine, error) {
+
+	// Reading From storePool
 
 	storePool.poolMutex.RLock()
 
@@ -28,23 +35,47 @@ func (storePool *StorePool) GetEngine(path string) *StoreEngine {
 
 		storePool.poolMutex.RUnlock()
 
-		return engine
+		return engine, nil
 	}
 
 	storePool.poolMutex.RUnlock()
+
+	// Updating Into storePool
 
 	storePool.poolMutex.Lock()
 
 	defer storePool.poolMutex.Unlock()
 
+	if engine, exists := storePool.storePool[path]; exists {
+
+		return engine, nil
+	}
+
+	isEngineAvailable := storePool.engineAvailable(path)
+
+	if !isForPut && !isEngineAvailable {
+
+		return nil, fmt.Errorf("engine %s is not available", path)
+	}
+
 	engine := NewStorageEngine(path)
 
 	storePool.storePool[path] = engine
 
-	return engine
+	return engine, nil
 }
 
-func (storePool *StorePool) SaveEngine(waitGroup *sync.WaitGroup) {
+func (storePool *StorePool) engineAvailable(path string) bool {
+
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+
+		return false
+	}
+
+	return true
+}
+
+func (storePool *StorePool) SaveEngine(waitGroup *sync.WaitGroup) error {
 
 	waitGroup.Add(1)
 
@@ -52,15 +83,30 @@ func (storePool *StorePool) SaveEngine(waitGroup *sync.WaitGroup) {
 
 		defer waitGroup.Done()
 
-		ticker := time.NewTicker(2 * time.Millisecond)
+		saveIndexInterval, err := GetSaveIndexInterval()
+
+		if err != nil {
+
+			log.Fatal("storePool.SaveEngine error : ", err.Error())
+		}
+
+		stopIndexInterval, err := GetStopIndexSaving()
+
+		if err != nil {
+
+			log.Fatal("storePool.SaveEngine error : ", err.Error())
+		}
+
+		ticker := time.NewTicker(time.Duration(saveIndexInterval) * time.Second)
 
 		defer ticker.Stop()
 
-		stopTime := time.NewTicker(60 * time.Second)
+		stopTime := time.NewTicker(time.Duration(stopIndexInterval) * time.Second)
 
 		defer stopTime.Stop()
 
 		for {
+
 			select {
 
 			case <-ticker.C:
@@ -105,4 +151,5 @@ func (storePool *StorePool) SaveEngine(waitGroup *sync.WaitGroup) {
 
 	}()
 
+	return nil
 }

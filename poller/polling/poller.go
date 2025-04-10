@@ -3,14 +3,24 @@ package polling
 import (
 	"fmt"
 	"math/rand"
-	. "reportdb/utils"
+	. "poller/utils"
 	"sync"
 	"time"
 )
 
-func PollData(waitGroup *sync.WaitGroup) <-chan []RowData {
+type Events struct {
+	ObjectId uint32
 
-	out := make(chan []RowData)
+	CounterId uint16
+
+	Timestamp uint32
+
+	Value interface{}
+}
+
+func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
+
+	out := make(chan []Events)
 
 	waitGroup.Add(1)
 
@@ -18,22 +28,21 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []RowData {
 
 		defer waitGroup.Done()
 
-		//ticker := time.NewTicker(time.Duration(GetPollingInterval()) * time.Second)
-		ticker := time.NewTicker(1 * time.Second)
+		time.Sleep(5 * time.Second)
+
+		ticker := time.NewTicker(time.Duration(GetPollingInterval()) * time.Second)
 
 		defer ticker.Stop()
 
-		//batchTicker := time.NewTicker(time.Duration(GetBatchInterval()) * time.Millisecond)
-		batchTicker := time.NewTicker(2500 * time.Millisecond)
+		batchTicker := time.NewTicker(time.Duration(GetBatchInterval()) * time.Millisecond)
 
 		defer batchTicker.Stop()
 
-		//stopTimer := time.NewTimer(time.Duration(GetStopTime()) * time.Second)
-		stopTimer := time.NewTimer(60 * time.Second)
+		stopTimer := time.NewTimer(time.Duration(GetStopTime()) * time.Second)
 
 		defer stopTimer.Stop()
 
-		var batch []RowData
+		var batch []Events
 
 		for {
 
@@ -64,7 +73,7 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []RowData {
 							value = generateRandomString(rand.Intn(50) + 1)
 						}
 
-						batch = append(batch, RowData{
+						batch = append(batch, Events{
 
 							ObjectId: objectId,
 
@@ -77,7 +86,7 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []RowData {
 
 						if counterId == 3 && objectId == 3 {
 
-							fmt.Println(batch[len(batch)-1])
+							fmt.Println("data : ", batch[len(batch)-1])
 						}
 					}
 				}
@@ -102,6 +111,7 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []RowData {
 
 				return
 			}
+
 		}
 	}()
 
