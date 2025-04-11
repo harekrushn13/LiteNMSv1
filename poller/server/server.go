@@ -5,9 +5,10 @@ import (
 	"github.com/pebbe/zmq4"
 	"log"
 	. "poller/polling"
+	"sync"
 )
 
-func ZMQServer(dataChannel <-chan []Events) {
+func ZMQServer(dataChannel <-chan []Events, waitGroup *sync.WaitGroup) {
 
 	context, err := zmq4.NewContext()
 
@@ -16,7 +17,11 @@ func ZMQServer(dataChannel <-chan []Events) {
 		log.Fatal(err)
 	}
 
-	go func(context *zmq4.Context) {
+	waitGroup.Add(1)
+
+	go func(context *zmq4.Context, waitGroup *sync.WaitGroup) {
+
+		waitGroup.Done()
 
 		publisher, err := context.NewSocket(zmq4.PUB)
 
@@ -50,6 +55,7 @@ func ZMQServer(dataChannel <-chan []Events) {
 
 		return
 
-	}(context)
+	}(context, waitGroup)
 
+	return
 }

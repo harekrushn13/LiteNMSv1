@@ -1,58 +1,111 @@
 package main
 
 import (
+	"fmt"
 	"log"
-	. "reportdb/datastore/reader"
+	"os"
+	"os/signal"
 	. "reportdb/datastore/writer"
 	. "reportdb/server"
 	. "reportdb/storage"
 	. "reportdb/utils"
-	"sync"
+	"syscall"
+	"time"
 )
 
 func main() {
 
-	//signalChannel := make(chan os.Signal, 1)
-	//
-	//signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	signalChannel := make(chan os.Signal, 1)
 
-	var waitGroup sync.WaitGroup
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	err := InitConfig()
 
 	if err != nil {
 
-		log.Fatal(err)
+		log.Printf("Error initializing config: %v", err)
+
+		return
 	}
 
 	dataChannel := make(chan []Events, 10)
 
-	err = ZMQServer(dataChannel, &waitGroup)
+	pollerContext, err := ZMQPoller(dataChannel)
 
 	if err != nil {
 
-		log.Fatal(err)
+		log.Printf("Error initializing ZMQ server: %v", err)
+
+		GlobalShutdown = true
+
+		pollerContext.Term()
+
+		return
 	}
 
 	storePool := NewStorePool()
 
-	writers, err := StartWriter(&waitGroup, storePool)
+	queryContext, err := ZMQQuery(storePool)
 
 	if err != nil {
 
-		log.Fatal(err)
+		log.Printf("Error initializing ZMQ query: %v", err)
+
+		GlobalShutdown = true
+
+		pollerContext.Term()
+
+		queryContext.Term()
+
+		return
 	}
 
-	DistributeData(dataChannel, writers, &waitGroup)
-
-	StartReader(&waitGroup, storePool)
-
-	err = storePool.SaveEngine(&waitGroup)
+	writers, err := StartWriter(storePool)
 
 	if err != nil {
 
-		log.Fatal(err)
+		log.Printf("Error starting writers: %v", err)
+
+		GlobalShutdown = true
+
+		pollerContext.Term()
+
+		queryContext.Term()
+
+		return
 	}
 
-	waitGroup.Wait()
+	DistributeData(dataChannel, writers)
+
+	ticker, err := storePool.SaveEngine()
+
+	if err != nil {
+
+		log.Printf("Error initializing store pool: %v", err)
+
+		GlobalShutdown = true
+
+		pollerContext.Term()
+
+		queryContext.Term()
+
+		ticker.Stop()
+
+		return
+	}
+
+	<-signalChannel
+
+	fmt.Println("\nstart shutting down : ", time.Now())
+
+	GlobalShutdown = true
+
+	pollerContext.Term()
+
+	queryContext.Term()
+
+	ticker.Stop()
+
+	fmt.Println("\n shutdown", time.Now())
+
 }

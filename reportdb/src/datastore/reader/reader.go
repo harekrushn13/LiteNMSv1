@@ -8,137 +8,21 @@ import (
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"strconv"
-	"sync"
 	"time"
 )
 
-type Query struct {
-	counterId uint16
+func FetchData(query *Query, storePool *StorePool) ([]interface{}, error) {
 
-	objectId uint32
-
-	from uint32
-
-	to uint32
-}
-
-func NewQuery(counterID uint16, objectID uint32, from uint32, to uint32) *Query {
-
-	return &Query{
-
-		counterId: counterID,
-
-		objectId: objectID,
-
-		from: from,
-
-		to: to,
-	}
-}
-
-type Reader struct {
-	storePool *StorePool
-
-	waitGroup *sync.WaitGroup
-}
-
-func StartReader(waitGroup *sync.WaitGroup, storePool *StorePool) {
-
-	numReaders, err := GetReaders()
-
-	if err != nil {
-
-		log.Fatal(err)
-	}
-
-	readers := make([]*Reader, numReaders)
-
-	for i := range numReaders {
-
-		readers[i] = &Reader{
-
-			storePool: storePool,
-
-			waitGroup: waitGroup,
-		}
-	}
-
-	for _, reader := range readers {
-
-		reader.runReader()
-	}
-
-}
-
-func (reader *Reader) runReader() {
-
-	reader.waitGroup.Add(1)
-
-	go func() {
-
-		defer reader.waitGroup.Done()
-
-		today := time.Now().Unix()
-
-		ticker := time.NewTicker(time.Second)
-
-		defer ticker.Stop()
-
-		stopIndexTime, err := GetStopIndexSaving()
-
-		if err != nil {
-
-			log.Fatal(err)
-		}
-
-		stopTime := time.NewTicker(time.Duration(stopIndexTime) * time.Second)
-
-		defer stopTime.Stop()
-
-		for {
-			select {
-
-			case <-ticker.C:
-				//query := NewQuery(3, 3, uint32(today), uint32(today)+7, baseDir)
-
-				NewQuery(3, 3, uint32(today), uint32(today)+12).runQuery(reader.storePool)
-
-			case <-stopTime.C:
-
-				return
-			}
-		}
-
-	}()
-
-}
-
-func (query *Query) runQuery(storePool *StorePool) {
-
-	results, err := query.fetchData(storePool)
-
-	if err != nil {
-
-		//log.Printf("query.runQuery : Error fetching data for query %d: %s", query.objectId, err)
-		fmt.Println(err)
-	}
-
-	fmt.Printf("%#v\n", results)
-
-}
-
-func (query *Query) fetchData(storePool *StorePool) ([]interface{}, error) {
-
-	dataType, err := GetCounterType(query.counterId)
+	dataType, err := GetCounterType(query.CounterId)
 
 	if err != nil {
 
 		return nil, fmt.Errorf("reader.fetchData error : %v", err)
 	}
 
-	fromTime := time.Unix(int64(query.from), 0).Truncate(24 * time.Hour).UTC()
+	fromTime := time.Unix(int64(query.From), 0).Truncate(24 * time.Hour).UTC()
 
-	toTime := time.Unix(int64(query.to), 0).Truncate(24 * time.Hour).UTC()
+	toTime := time.Unix(int64(query.To), 0).Truncate(24 * time.Hour).UTC()
 
 	var results []interface{}
 
@@ -151,7 +35,7 @@ func (query *Query) fetchData(storePool *StorePool) ([]interface{}, error) {
 			return nil, fmt.Errorf("reader.fetchData error : %v", err)
 		}
 
-		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.counterId))
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
 
 		store, error := storePool.GetEngine(path, false)
 
@@ -162,7 +46,7 @@ func (query *Query) fetchData(storePool *StorePool) ([]interface{}, error) {
 			continue
 		}
 
-		dayResult, err := store.Get(query.objectId, query.from, query.to)
+		dayResult, err := store.Get(query.ObjectId, query.From, query.To)
 
 		if err != nil {
 
@@ -188,7 +72,7 @@ func (query *Query) fetchData(storePool *StorePool) ([]interface{}, error) {
 
 	if len(results) == 0 {
 
-		return nil, fmt.Errorf("no data found in time range %d-%d", query.from, query.to)
+		return nil, fmt.Errorf("no data found in time range %d-%d", query.From, query.To)
 	}
 
 	return results, nil

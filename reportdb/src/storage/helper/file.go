@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	. "reportdb/utils"
@@ -99,11 +100,11 @@ func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) 
 
 	if handle.AvailableSize > 0 {
 
-		handle.Offset = fileInfo.Size() - 4
+		handle.Offset = int64(binary.LittleEndian.Uint64(mappedBuffer[:8]))
 
 	} else {
 
-		handle.Offset = fileInfo.Size() + 4
+		handle.Offset = handle.AvailableSize + 8
 	}
 
 	handle.MappedBuffer = mappedBuffer

@@ -8,7 +8,6 @@ import (
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -18,11 +17,9 @@ type Writer struct {
 	events chan Events
 
 	storePool *StorePool
-
-	waitGroup *sync.WaitGroup
 }
 
-func initializeWriters(waitGroup *sync.WaitGroup, storePool *StorePool) ([]*Writer, error) {
+func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 
 	numWriters, err := GetWriters()
 
@@ -49,17 +46,15 @@ func initializeWriters(waitGroup *sync.WaitGroup, storePool *StorePool) ([]*Writ
 			events: make(chan Events, eventsBuffer),
 
 			storePool: storePool,
-
-			waitGroup: waitGroup,
 		}
 	}
 
 	return writers, nil
 }
 
-func StartWriter(waitGroup *sync.WaitGroup, storePool *StorePool) ([]*Writer, error) {
+func StartWriter(storePool *StorePool) ([]*Writer, error) {
 
-	writers, err := initializeWriters(waitGroup, storePool)
+	writers, err := initializeWriters(storePool)
 
 	if err != nil {
 
@@ -74,13 +69,17 @@ func StartWriter(waitGroup *sync.WaitGroup, storePool *StorePool) ([]*Writer, er
 	return writers, nil
 }
 
+func ShutdownWriters(writers []*Writer) {
+
+	for _, writer := range writers {
+
+		close(writer.events)
+	}
+}
+
 func (writer *Writer) runWriter() {
 
-	writer.waitGroup.Add(1)
-
-	go func() {
-
-		defer writer.waitGroup.Done()
+	go func(writer *Writer) {
 
 		for row := range writer.events {
 
@@ -127,7 +126,8 @@ func (writer *Writer) runWriter() {
 		}
 
 		return
-	}()
+
+	}(writer)
 }
 
 func encodeData(row Events) ([]byte, error) {

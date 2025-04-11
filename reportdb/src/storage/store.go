@@ -59,11 +59,11 @@ func (store *StoreEngine) Put(key uint32, timestamp uint32, data []byte) error {
 
 	offset := handle.Offset
 
-	binary.LittleEndian.PutUint32(handle.MappedBuffer[:4], uint32(handle.AvailableSize-int64(len(data))))
-
 	copy(handle.MappedBuffer[offset:], data)
 
 	handle.Offset += int64(len(data))
+
+	binary.LittleEndian.PutUint64(handle.MappedBuffer[:8], uint64(handle.Offset))
 
 	store.indexManager.Update(key, offset, timestamp, fileId)
 

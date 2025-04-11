@@ -75,37 +75,40 @@ func (storePool *StorePool) engineAvailable(path string) bool {
 	return true
 }
 
-func (storePool *StorePool) SaveEngine(waitGroup *sync.WaitGroup) error {
+func (storePool *StorePool) SaveEngine() (*time.Ticker, error) {
 
-	waitGroup.Add(1)
+	saveIndexInterval, err := GetSaveIndexInterval()
 
-	go func() {
+	if err != nil {
 
-		defer waitGroup.Done()
+		return nil, fmt.Errorf("storePool.SaveEngine error : %v", err.Error())
+	}
 
-		saveIndexInterval, err := GetSaveIndexInterval()
+	ticker := time.NewTicker(time.Duration(saveIndexInterval) * time.Second)
 
-		if err != nil {
-
-			log.Fatal("storePool.SaveEngine error : ", err.Error())
-		}
-
-		stopIndexInterval, err := GetStopIndexSaving()
-
-		if err != nil {
-
-			log.Fatal("storePool.SaveEngine error : ", err.Error())
-		}
-
-		ticker := time.NewTicker(time.Duration(saveIndexInterval) * time.Second)
-
-		defer ticker.Stop()
-
-		stopTime := time.NewTicker(time.Duration(stopIndexInterval) * time.Second)
-
-		defer stopTime.Stop()
+	go func(storePool *StorePool) {
 
 		for {
+
+			if GlobalShutdown {
+
+				for _, engine := range storePool.storePool {
+
+					if engine.isUsedPut == true {
+
+						engine.lastSave = time.Now().Unix()
+
+						err := engine.indexManager.Save()
+
+						if err != nil {
+
+							log.Printf("storePool.SaveEngine error: %s\n", err)
+						}
+					}
+				}
+
+				return
+			}
 
 			select {
 
@@ -127,29 +130,10 @@ func (storePool *StorePool) SaveEngine(waitGroup *sync.WaitGroup) error {
 						}
 					}
 				}
-
-			case <-stopTime.C:
-
-				for _, engine := range storePool.storePool {
-
-					if engine.isUsedPut == true {
-
-						engine.lastSave = time.Now().Unix()
-
-						err := engine.indexManager.Save()
-
-						if err != nil {
-
-							log.Printf("storePool.SaveEngine error: %s\n", err)
-						}
-					}
-				}
-
-				return
 			}
 		}
 
-	}()
+	}(storePool)
 
-	return nil
+	return ticker, nil
 }

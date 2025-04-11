@@ -121,9 +121,7 @@ func (indexManager *IndexManager) GetIndexMapEntryList(objectId uint32, indexId 
 		}
 	}
 
-	entryList, exists = indexHandle.indexMapping[objectId]
-
-	return entryList, nil
+	return indexHandle.indexMapping[objectId], nil
 }
 
 func (indexManager *IndexManager) getIndexHandle(indexId uint8) *IndexHandle {

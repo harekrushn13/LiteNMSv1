@@ -13,7 +13,7 @@ func main() {
 
 	var waitGroup sync.WaitGroup
 
-	ZMQServer(PollData(&waitGroup))
+	ZMQServer(PollData(&waitGroup), &waitGroup)
 
 	waitGroup.Wait()
 }
