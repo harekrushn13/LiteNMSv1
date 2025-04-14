@@ -28,34 +28,24 @@ func main() {
 		return
 	}
 
-	dataChannel := make(chan []Events, 10)
+	dataChannel := make(chan []Events, 10) // 10 buffer to receive []Events
 
-	pollerContext, err := ZMQPoller(dataChannel)
+	pollerServer, err := ZMQPoller(dataChannel)
 
 	if err != nil {
 
-		log.Printf("Error initializing ZMQ server: %v", err)
-
-		GlobalShutdown = true
-
-		pollerContext.Term()
+		log.Printf("Error initializing ZMQ queryServer: %v", err)
 
 		return
 	}
 
 	storePool := NewStorePool()
 
-	queryContext, err := ZMQQuery(storePool)
+	queryServer, err := NewQueryServer(10, storePool) // 10 workers
 
 	if err != nil {
 
-		log.Printf("Error initializing ZMQ query: %v", err)
-
-		GlobalShutdown = true
-
-		pollerContext.Term()
-
-		queryContext.Term()
+		log.Printf("Failed to start queryServer: %v", err)
 
 		return
 	}
@@ -66,30 +56,16 @@ func main() {
 
 		log.Printf("Error starting writers: %v", err)
 
-		GlobalShutdown = true
-
-		pollerContext.Term()
-
-		queryContext.Term()
-
 		return
 	}
 
 	DistributeData(dataChannel, writers)
 
-	ticker, err := storePool.SaveEngine()
+	err = storePool.SaveEngine()
 
 	if err != nil {
 
 		log.Printf("Error initializing store pool: %v", err)
-
-		GlobalShutdown = true
-
-		pollerContext.Term()
-
-		queryContext.Term()
-
-		ticker.Stop()
 
 		return
 	}
@@ -100,12 +76,11 @@ func main() {
 
 	GlobalShutdown = true
 
-	pollerContext.Term()
+	pollerServer.Shutdown()
 
-	queryContext.Term()
+	queryServer.Shutdown()
 
-	ticker.Stop()
+	storePool.Shutdown()
 
-	fmt.Println("\n shutdown", time.Now())
-
+	fmt.Println("\nshutdown", time.Now())
 }

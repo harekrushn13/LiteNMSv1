@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func FetchData(query *Query, storePool *StorePool) ([]interface{}, error) {
+func FetchData(query Query, storePool *StorePool) ([]interface{}, error) {
 
 	dataType, err := GetCounterType(query.CounterId)
 
@@ -41,7 +41,7 @@ func FetchData(query *Query, storePool *StorePool) ([]interface{}, error) {
 
 		if error != nil {
 
-			log.Printf("reader.fetchData error : %v", error)
+			//log.Printf("reader.fetchData error : %v", error)
 
 			continue
 		}

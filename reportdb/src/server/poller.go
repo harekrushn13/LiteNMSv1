@@ -8,7 +8,15 @@ import (
 	. "reportdb/utils"
 )
 
-func ZMQPoller(dataChannel chan []Events) (*zmq4.Context, error) {
+type PollerServer struct {
+	context *zmq4.Context
+
+	subscriber *zmq4.Socket
+
+	shutdown chan bool
+}
+
+func ZMQPoller(dataChannel chan []Events) (*PollerServer, error) {
 
 	context, err := zmq4.NewContext()
 
@@ -17,70 +25,101 @@ func ZMQPoller(dataChannel chan []Events) (*zmq4.Context, error) {
 		return nil, fmt.Errorf("ZMQPoller : Error creating ZMQ context: %v", err)
 	}
 
-	go func(context *zmq4.Context, dataChannel chan []Events) {
+	subscriber, err := context.NewSocket(zmq4.SUB)
 
-		subscriber, err := context.NewSocket(zmq4.SUB)
+	if err != nil {
 
-		defer subscriber.Close()
+		context.Term()
 
-		if err != nil {
+		return nil, fmt.Errorf("ZMQPoller : Error creating subscriber: %v", err)
+	}
 
-			log.Printf("ZMQPoller : Error creating subscriber: %v", err)
+	err = subscriber.Connect("tcp://localhost:6000")
+
+	if err != nil {
+
+		subscriber.Close()
+
+		context.Term()
+
+		return nil, fmt.Errorf("ZMQPoller : Error connecting to subscriber: %v", err)
+	}
+
+	err = subscriber.SetSubscribe("")
+
+	if err != nil {
+
+		subscriber.Close()
+
+		context.Term()
+
+		return nil, fmt.Errorf("ZMQPoller : Error subscribing to zmq4: %v", err)
+	}
+
+	poller := &PollerServer{
+
+		context: context,
+
+		subscriber: subscriber,
+
+		shutdown: make(chan bool, 1),
+	}
+
+	go poller.listen(dataChannel)
+
+	return poller, nil
+}
+
+func (poller *PollerServer) listen(dataChannel chan []Events) {
+
+	for {
+
+		select {
+
+		case <-poller.shutdown:
+
+			poller.subscriber.Close()
+
+			close(dataChannel)
+
+			poller.shutdown <- true
 
 			return
-		}
 
-		err = subscriber.Connect("tcp://localhost:6000")
+		default:
 
-		if err != nil {
+			batchData, err := poller.subscriber.RecvBytes(0)
 
-			log.Printf("ZMQPoller : Error connecting to subscriber: %v", err)
-
-			return
-		}
-
-		err = subscriber.SetSubscribe("")
-
-		if err != nil {
-
-			log.Printf("ZMQPoller : Error subscribing to zmq4: %v", err)
-
-			return
-		}
-
-		for {
-
-			if GlobalShutdown {
-
-				close(dataChannel)
-
-				return
-			}
-
-			batchData, err := subscriber.Recv(0)
+			fmt.Println("batchData:", string(batchData))
 
 			if err != nil {
 
 				log.Printf("ZMQPoller : Error receiving message: %v", err)
 
-				return
+				continue
 			}
 
 			var events []Events
 
-			err = json.Unmarshal([]byte(batchData), &events)
+			err = json.Unmarshal(batchData, &events)
 
 			if err != nil {
 
 				log.Printf("ZMQPoller : Error unmarshalling message: %v", err)
 
-				return
+				continue
 			}
 
 			dataChannel <- events
 		}
+	}
+}
 
-	}(context, dataChannel)
+func (poller *PollerServer) Shutdown() {
 
-	return context, nil
+	poller.shutdown <- true
+
+	poller.context.Term()
+
+	<-poller.shutdown
 }

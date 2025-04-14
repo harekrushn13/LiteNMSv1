@@ -1,5 +1,3 @@
 {
-  "stopPolling": 10,
-  "saveIndexInterval": 2,
-  "stopIndexSaving": 20
+  "saveIndexInterval": 3
 }

@@ -7,7 +7,7 @@ import (
 
 func DistributeData(dataChannel chan []Events, writers []*Writer) {
 
-	go func(dataChannel chan []Events, writers []*Writer) {
+	go func() {
 
 		defer ShutdownWriters(writers)
 
@@ -16,8 +16,6 @@ func DistributeData(dataChannel chan []Events, writers []*Writer) {
 		if err != nil {
 
 			log.Printf("distributeData error : %v", err)
-
-			GlobalShutdown = true
 
 			return
 		}
@@ -32,8 +30,6 @@ func DistributeData(dataChannel chan []Events, writers []*Writer) {
 
 					log.Printf("distributeData error : Writer index is out of range")
 
-					GlobalShutdown = true
-
 					return
 				}
 
@@ -43,7 +39,7 @@ func DistributeData(dataChannel chan []Events, writers []*Writer) {
 
 		return
 
-	}(dataChannel, writers)
+	}()
 
 	return
 }

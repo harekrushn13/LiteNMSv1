@@ -13,6 +13,8 @@ type StorePool struct {
 	storePool map[string]*StoreEngine // map["./database/YYYY/MM/DD/counter_1"]
 
 	poolMutex *sync.RWMutex
+
+	shutdown chan bool
 }
 
 func NewStorePool() *StorePool {
@@ -22,6 +24,8 @@ func NewStorePool() *StorePool {
 		storePool: make(map[string]*StoreEngine),
 
 		poolMutex: &sync.RWMutex{},
+
+		shutdown: make(chan bool, 1),
 	}
 }
 
@@ -75,65 +79,86 @@ func (storePool *StorePool) engineAvailable(path string) bool {
 	return true
 }
 
-func (storePool *StorePool) SaveEngine() (*time.Ticker, error) {
+func (storePool *StorePool) SaveEngine() error {
 
 	saveIndexInterval, err := GetSaveIndexInterval()
 
 	if err != nil {
 
-		return nil, fmt.Errorf("storePool.SaveEngine error : %v", err.Error())
+		return fmt.Errorf("storePool.SaveEngine error : %v", err.Error())
 	}
 
 	ticker := time.NewTicker(time.Duration(saveIndexInterval) * time.Second)
 
-	go func(storePool *StorePool) {
+	go func(storePool *StorePool, ticker *time.Ticker) {
 
 		for {
 
-			if GlobalShutdown {
+			select {
 
-				for _, engine := range storePool.storePool {
+			case <-storePool.shutdown:
 
-					if engine.isUsedPut == true {
+				ticker.Stop()
 
-						engine.lastSave = time.Now().Unix()
-
-						err := engine.indexManager.Save()
-
-						if err != nil {
-
-							log.Printf("storePool.SaveEngine error: %s\n", err)
-						}
-					}
-				}
+				<-storePool.shutdown
 
 				return
-			}
-
-			select {
 
 			case <-ticker.C:
 
-				currentTime := time.Now().Unix()
-
-				for _, engine := range storePool.storePool {
-
-					if engine.isUsedPut == true && currentTime-engine.lastSave >= 2 {
-
-						engine.lastSave = currentTime
-
-						err := engine.indexManager.Save()
-
-						if err != nil {
-
-							log.Printf("storePool.SaveEngine error: %s\n", err)
-						}
-					}
-				}
+				storePool.flushAllEngines()
 			}
 		}
 
-	}(storePool)
+	}(storePool, ticker)
 
-	return ticker, nil
+	return nil
+}
+
+func (storePool *StorePool) flushAllEngines() {
+
+	currentTime := time.Now().Unix()
+
+	storePool.poolMutex.RLock()
+
+	defer storePool.poolMutex.RUnlock()
+
+	for _, engine := range storePool.storePool {
+
+		if engine.isUsedPut == true && currentTime-engine.lastSave >= 2 {
+
+			engine.lastSave = currentTime
+
+			err := engine.indexManager.Save()
+
+			if err != nil {
+
+				log.Printf("storePool.SaveEngine error: %s\n", err)
+			}
+		}
+	}
+}
+
+func (storePool *StorePool) Shutdown() {
+
+	storePool.shutdown <- true
+
+	storePool.poolMutex.Lock()
+
+	currentTime := time.Now().Unix()
+
+	for _, engine := range storePool.storePool {
+
+		if engine.isUsedPut {
+
+			engine.lastSave = currentTime
+
+			if err := engine.indexManager.Save(); err != nil {
+
+				log.Printf("storePool.SaveEngine error: %s\n", err)
+			}
+		}
+	}
+
+	storePool.poolMutex.Unlock()
 }

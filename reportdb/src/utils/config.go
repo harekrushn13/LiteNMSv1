@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 )
 
+var GlobalShutdown bool
+
 type ConfigType = string
 
 const (
@@ -227,18 +229,6 @@ func GetCounterType(counterId uint16) (DataType, error) {
 	return value, nil
 }
 
-func GetStopTime() (int64, error) {
-
-	value, ok := intervalMapping[StopTime]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : stopTime not found")
-	}
-
-	return value, nil
-}
-
 func GetSaveIndexInterval() (int64, error) {
 
 	value, ok := intervalMapping[SaveIndexInterval]
@@ -246,18 +236,6 @@ func GetSaveIndexInterval() (int64, error) {
 	if !ok {
 
 		return 0, fmt.Errorf("InitConfig : saveIndexInterval not found")
-	}
-
-	return value, nil
-}
-
-func GetStopIndexSaving() (int64, error) {
-
-	value, ok := intervalMapping[StopIndexSaving]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : stopIndexSaving not found")
 	}
 
 	return value, nil

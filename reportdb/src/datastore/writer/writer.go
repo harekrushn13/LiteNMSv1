@@ -8,6 +8,7 @@ import (
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,8 @@ type Writer struct {
 	events chan Events
 
 	storePool *StorePool
+
+	waitGroup *sync.WaitGroup
 }
 
 func initializeWriters(storePool *StorePool) ([]*Writer, error) {
@@ -46,6 +49,8 @@ func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 			events: make(chan Events, eventsBuffer),
 
 			storePool: storePool,
+
+			waitGroup: &sync.WaitGroup{},
 		}
 	}
 
@@ -74,12 +79,18 @@ func ShutdownWriters(writers []*Writer) {
 	for _, writer := range writers {
 
 		close(writer.events)
+
+		writer.waitGroup.Wait()
 	}
 }
 
 func (writer *Writer) runWriter() {
 
+	writer.waitGroup.Add(1)
+
 	go func(writer *Writer) {
+
+		defer writer.waitGroup.Done()
 
 		for row := range writer.events {
 
@@ -91,7 +102,7 @@ func (writer *Writer) runWriter() {
 
 				log.Printf("writer.runWriter : Error getting working directory: %v", err)
 
-				return
+				continue
 			}
 
 			path := workingDirectory + "/database/" + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
@@ -102,7 +113,7 @@ func (writer *Writer) runWriter() {
 
 				log.Printf("writer.runWriter : Error getting store: %v", err)
 
-				return
+				continue
 			}
 
 			data, err := encodeData(row)
@@ -111,7 +122,7 @@ func (writer *Writer) runWriter() {
 
 				log.Printf("writer.runWriter : failed to encode data: %s", err)
 
-				return
+				continue
 			}
 
 			err = store.Put(row.ObjectId, row.Timestamp, data)
@@ -120,7 +131,7 @@ func (writer *Writer) runWriter() {
 
 				log.Printf("writer.runWriter : failed to write data: %s", err)
 
-				return
+				continue
 			}
 
 		}

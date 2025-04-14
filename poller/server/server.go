@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/pebbe/zmq4"
 	"log"
 	. "poller/polling"
@@ -21,7 +22,7 @@ func ZMQServer(dataChannel <-chan []Events, waitGroup *sync.WaitGroup) {
 
 	go func(context *zmq4.Context, waitGroup *sync.WaitGroup) {
 
-		waitGroup.Done()
+		defer waitGroup.Done()
 
 		publisher, err := context.NewSocket(zmq4.PUB)
 
@@ -47,11 +48,17 @@ func ZMQServer(dataChannel <-chan []Events, waitGroup *sync.WaitGroup) {
 
 			_, err = publisher.SendBytes(jsonData, 0)
 
+			fmt.Println("hello send")
+
 			if err != nil {
 
 				log.Println("Error sending batch:", err)
 			}
 		}
+
+		publisher.Close()
+
+		context.Term()
 
 		return
 

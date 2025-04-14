@@ -6,6 +6,7 @@
       <excludeFolder url="file://$MODULE_DIR$/reportdb/database" />
       <excludeFolder url="file://$MODULE_DIR$/reportdb/profiling/profiles" />
       <excludeFolder url="file://$MODULE_DIR$/reportdb/temp" />
+      <excludeFolder url="file://$MODULE_DIR$/reportdb/profiling" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

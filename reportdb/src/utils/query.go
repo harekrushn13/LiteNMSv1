@@ -1,11 +1,17 @@
 package utils
 
+import "time"
+
 type Query struct {
-	CounterId uint16
+	RequestID string `json:"request_id"`
 
-	ObjectId uint32
+	CounterId uint16 `json:"counter_id"`
 
-	From uint32
+	ObjectId uint32 `json:"object_id"`
 
-	To uint32
+	From uint32 `json:"from"`
+
+	To uint32 `json:"to"`
+
+	Timestamp time.Time `json:"timestamp"`
 }
