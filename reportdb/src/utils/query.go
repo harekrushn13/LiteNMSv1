@@ -3,9 +3,9 @@ package utils
 import "time"
 
 type Query struct {
-	RequestID string `json:"request_id"`
+	Timestamp time.Time `json:"timestamp"`
 
-	CounterId uint16 `json:"counter_id"`
+	RequestID uint64 `json:"request_id"`
 
 	ObjectId uint32 `json:"object_id"`
 
@@ -13,5 +13,15 @@ type Query struct {
 
 	To uint32 `json:"to"`
 
+	CounterId uint16 `json:"counter_id"`
+}
+
+type Response struct {
 	Timestamp time.Time `json:"timestamp"`
+
+	RequestID uint64 `json:"request_id"`
+
+	Error string `json:"error,omitempty"`
+
+	Data interface{} `json:"data"`
 }

@@ -26,10 +26,7 @@ func NewClient() (*Client, error) {
 
 func (client *Client) ExecuteQuery(query Query) (*Response, error) {
 
-	if query.RequestID == "" {
-
-		query.RequestID = uuid.New().String()
-	}
+	query.RequestID = uint64(uuid.New().ID())
 
 	query.Timestamp = time.Now()
 

@@ -16,13 +16,13 @@ type PollerServer struct {
 	shutdown chan bool
 }
 
-func ZMQPoller(dataChannel chan []Events) (*PollerServer, error) {
+func NewPollerServer(dataChannel chan []Events) (*PollerServer, error) {
 
 	context, err := zmq4.NewContext()
 
 	if err != nil {
 
-		return nil, fmt.Errorf("ZMQPoller : Error creating ZMQ context: %v", err)
+		return nil, fmt.Errorf("NewPollerServer : Error creating ZMQ context: %v", err)
 	}
 
 	subscriber, err := context.NewSocket(zmq4.SUB)
@@ -31,7 +31,7 @@ func ZMQPoller(dataChannel chan []Events) (*PollerServer, error) {
 
 		context.Term()
 
-		return nil, fmt.Errorf("ZMQPoller : Error creating subscriber: %v", err)
+		return nil, fmt.Errorf("NewPollerServer : Error creating subscriber: %v", err)
 	}
 
 	err = subscriber.Connect("tcp://localhost:6000")
@@ -42,7 +42,7 @@ func ZMQPoller(dataChannel chan []Events) (*PollerServer, error) {
 
 		context.Term()
 
-		return nil, fmt.Errorf("ZMQPoller : Error connecting to subscriber: %v", err)
+		return nil, fmt.Errorf("NewPollerServer : Error connecting to subscriber: %v", err)
 	}
 
 	err = subscriber.SetSubscribe("")
@@ -53,7 +53,7 @@ func ZMQPoller(dataChannel chan []Events) (*PollerServer, error) {
 
 		context.Term()
 
-		return nil, fmt.Errorf("ZMQPoller : Error subscribing to zmq4: %v", err)
+		return nil, fmt.Errorf("NewPollerServer : Error subscribing to zmq4: %v", err)
 	}
 
 	poller := &PollerServer{
@@ -94,7 +94,7 @@ func (poller *PollerServer) listen(dataChannel chan []Events) {
 
 			if err != nil {
 
-				log.Printf("ZMQPoller : Error receiving message: %v", err)
+				log.Printf("NewPollerServer : Error receiving message: %v", err)
 
 				continue
 			}
@@ -105,7 +105,7 @@ func (poller *PollerServer) listen(dataChannel chan []Events) {
 
 			if err != nil {
 
-				log.Printf("ZMQPoller : Error unmarshalling message: %v", err)
+				log.Printf("NewPollerServer : Error unmarshalling message: %v", err)
 
 				continue
 			}

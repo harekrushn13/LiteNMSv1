@@ -3,7 +3,6 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
-	. "reportdb/storage/helper"
 	. "reportdb/utils"
 )
 
@@ -53,17 +52,17 @@ func (store *StoreEngine) Put(key uint32, timestamp uint32, data []byte) error {
 		return fmt.Errorf("fileManager.CheckCapacity(%d): %v", fileId, err)
 	}
 
-	handle.Lock.Lock()
+	handle.lock.Lock()
 
-	defer handle.Lock.Unlock()
+	defer handle.lock.Unlock()
 
 	offset := handle.Offset
 
-	copy(handle.MappedBuffer[offset:], data)
+	copy(handle.mappedBuffer[offset:], data)
 
 	handle.Offset += int64(len(data))
 
-	binary.LittleEndian.PutUint64(handle.MappedBuffer[:8], uint64(handle.Offset))
+	binary.LittleEndian.PutUint64(handle.mappedBuffer[:8], uint64(handle.Offset))
 
 	store.indexManager.Update(key, offset, timestamp, fileId)
 
@@ -100,29 +99,29 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 		return nil, fmt.Errorf("failed to get handle for partition %d: %v", fileId, err)
 	}
 
-	handle.Lock.RLock()
+	handle.lock.RLock()
 
-	defer handle.Lock.RUnlock()
+	defer handle.lock.RUnlock()
 
 	var dayResults [][]byte
 
 	for _, offset := range validOffsets {
 
-		if offset+4 > int64(len(handle.MappedBuffer)) {
+		if offset+4 > int64(len(handle.mappedBuffer)) {
 
 			return nil, fmt.Errorf("offset %d out of bounds for length prefix", offset)
 		}
 
-		length := binary.LittleEndian.Uint32(handle.MappedBuffer[offset : offset+4])
+		length := binary.LittleEndian.Uint32(handle.mappedBuffer[offset : offset+4])
 
-		if offset+4+int64(length) > int64(len(handle.MappedBuffer)) {
+		if offset+4+int64(length) > int64(len(handle.mappedBuffer)) {
 
 			return nil, fmt.Errorf("record at offset %d extends beyond file bounds", offset)
 		}
 
 		record := make([]byte, length)
 
-		copy(record, handle.MappedBuffer[offset+4:offset+4+int64(length)])
+		copy(record, handle.mappedBuffer[offset+4:offset+4+int64(length)])
 
 		dayResults = append(dayResults, record)
 	}

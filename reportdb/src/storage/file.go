@@ -1,4 +1,4 @@
-package helper
+package storage
 
 import (
 	"encoding/binary"
@@ -11,23 +11,23 @@ import (
 )
 
 type FileHandle struct {
-	File *os.File
+	file *os.File
+
+	availableSize int64
 
 	Offset int64
 
-	Lock *sync.RWMutex
+	lock *sync.RWMutex
 
-	AvailableSize int64
-
-	MappedBuffer []byte
+	mappedBuffer []byte
 }
 
 type FileManager struct {
+	baseDir string
+
 	fileHandles map[uint8]*FileHandle // fileHandles[partitionId]
 
 	lock sync.RWMutex
-
-	baseDir string
 }
 
 func NewFileManager(baseDir string) *FileManager {
@@ -89,25 +89,25 @@ func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) 
 
 	handle = &FileHandle{
 
-		File: file,
+		file: file,
 
-		AvailableSize: fileInfo.Size(),
+		availableSize: fileInfo.Size(),
 
-		Lock: &sync.RWMutex{},
+		lock: &sync.RWMutex{},
 	}
 
-	mappedBuffer, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	mappedBuffer, err := syscall.Mmap(int(handle.file.Fd()), 0, int(handle.availableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 
-	if handle.AvailableSize > 0 {
+	if handle.availableSize > 0 {
 
 		handle.Offset = int64(binary.LittleEndian.Uint64(mappedBuffer[:8]))
 
 	} else {
 
-		handle.Offset = handle.AvailableSize + 8
+		handle.Offset = handle.availableSize + 8
 	}
 
-	handle.MappedBuffer = mappedBuffer
+	handle.mappedBuffer = mappedBuffer
 
 	fileManager.fileHandles[partition] = handle
 
@@ -116,18 +116,18 @@ func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) 
 
 func (fileManager *FileManager) CheckCapacity(handle *FileHandle, requiredSize int64) error {
 
-	handle.Lock.Lock()
+	handle.lock.Lock()
 
-	defer handle.Lock.Unlock()
+	defer handle.lock.Unlock()
 
-	if handle.Offset+requiredSize <= handle.AvailableSize {
+	if handle.Offset+requiredSize <= handle.availableSize {
 
 		return nil
 	}
 
-	if handle.MappedBuffer != nil {
+	if handle.mappedBuffer != nil {
 
-		if err := syscall.Munmap(handle.MappedBuffer); err != nil {
+		if err := syscall.Munmap(handle.mappedBuffer); err != nil {
 
 			return fmt.Errorf("munmap failed: %v", err)
 		}
@@ -140,21 +140,21 @@ func (fileManager *FileManager) CheckCapacity(handle *FileHandle, requiredSize i
 		return err
 	}
 
-	handle.AvailableSize = handle.Offset + fileGrowthSize
+	handle.availableSize = handle.Offset + fileGrowthSize
 
-	if err := handle.File.Truncate(handle.AvailableSize); err != nil {
+	if err := handle.file.Truncate(handle.availableSize); err != nil {
 
 		return fmt.Errorf("failed to grow file: %v", err)
 	}
 
-	mappedBuffer, err := syscall.Mmap(int(handle.File.Fd()), 0, int(handle.AvailableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	mappedBuffer, err := syscall.Mmap(int(handle.file.Fd()), 0, int(handle.availableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 
 	if err != nil {
 
 		return fmt.Errorf("mmap failed: %v", err)
 	}
 
-	handle.MappedBuffer = mappedBuffer
+	handle.mappedBuffer = mappedBuffer
 
 	return nil
 }

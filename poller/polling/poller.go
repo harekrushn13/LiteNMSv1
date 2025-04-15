@@ -36,9 +36,9 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
 
 		defer batchTicker.Stop()
 
-		stopTimer := time.NewTimer(time.Duration(GetStopTime()) * time.Millisecond)
-
-		defer stopTimer.Stop()
+		//stopTimer := time.NewTimer(time.Duration(GetStopTime()) * time.Millisecond)
+		//
+		//defer stopTimer.Stop()
 
 		var batch []Events
 

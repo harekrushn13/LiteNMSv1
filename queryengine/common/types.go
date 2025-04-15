@@ -3,7 +3,7 @@ package common
 import "time"
 
 type Query struct {
-	RequestID string `json:"request_id"`
+	RequestID uint64 `json:"request_id"`
 
 	CounterID uint16 `json:"counter_id"`
 
@@ -17,7 +17,7 @@ type Query struct {
 }
 
 type Response struct {
-	RequestID string `json:"request_id"`
+	RequestID uint64 `json:"request_id"`
 
 	Data interface{} `json:"data"`
 

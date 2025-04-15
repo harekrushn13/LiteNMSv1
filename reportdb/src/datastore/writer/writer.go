@@ -1,15 +1,11 @@
 package writer
 
 import (
-	"encoding/binary"
 	"fmt"
 	"log"
-	"math"
 	. "reportdb/storage"
 	. "reportdb/utils"
-	"strconv"
 	"sync"
-	"time"
 )
 
 type Writer struct {
@@ -31,7 +27,7 @@ func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 		return nil, fmt.Errorf("initializeWriters : Error getting writers: %v", err)
 	}
 
-	eventsBuffer, err := GetEventsBuffer()
+	eventsBuffer, err := GetWriterEventBuffer()
 
 	if err != nil {
 
@@ -66,25 +62,23 @@ func StartWriter(storePool *StorePool) ([]*Writer, error) {
 		return nil, fmt.Errorf("StartWriter : Error getting writers: %v", err)
 	}
 
+	workingDirectory, err := GetWorkingDirectory()
+
+	if err != nil {
+
+		return nil, fmt.Errorf("writer.runWriter : Error getting working directory: %v", err)
+
+	}
+
 	for _, writer := range writers {
 
-		writer.runWriter()
+		writer.runWriter(workingDirectory)
 	}
 
 	return writers, nil
 }
 
-func ShutdownWriters(writers []*Writer) {
-
-	for _, writer := range writers {
-
-		close(writer.events)
-
-		writer.waitGroup.Wait()
-	}
-}
-
-func (writer *Writer) runWriter() {
+func (writer *Writer) runWriter(workingDirectory string) {
 
 	writer.waitGroup.Add(1)
 
@@ -94,20 +88,7 @@ func (writer *Writer) runWriter() {
 
 		for row := range writer.events {
 
-			day := time.Unix(int64(row.Timestamp), 0).Truncate(24 * time.Hour).UTC()
-
-			workingDirectory, err := GetWorkingDirectory()
-
-			if err != nil {
-
-				log.Printf("writer.runWriter : Error getting working directory: %v", err)
-
-				continue
-			}
-
-			path := workingDirectory + "/database/" + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
-
-			store, err := writer.storePool.GetEngine(path, true)
+			store, err := writer.storePool.GetEngine(getPath(workingDirectory, row), true)
 
 			if err != nil {
 
@@ -141,72 +122,12 @@ func (writer *Writer) runWriter() {
 	}(writer)
 }
 
-func encodeData(row Events) ([]byte, error) {
+func ShutdownWriters(writers []*Writer) {
 
-	dataType, err := GetCounterType(row.CounterId)
+	for _, writer := range writers {
 
-	if err != nil {
+		close(writer.events)
 
-		return nil, fmt.Errorf("encodeData : Error getting counter type: %v", err)
-	}
-
-	switch dataType {
-
-	case TypeUint64:
-
-		val, ok := row.Value.(float64)
-
-		if !ok {
-
-			return nil, fmt.Errorf("encodeData : invalid uint64 value for counter %d", row.CounterId)
-		}
-
-		newvalue := uint64(val)
-
-		data := make([]byte, 12)
-
-		binary.LittleEndian.PutUint32(data, 8)
-
-		binary.LittleEndian.PutUint64(data[4:], newvalue)
-
-		return data, nil
-
-	case TypeFloat64:
-
-		val, ok := row.Value.(float64)
-
-		if !ok {
-
-			return nil, fmt.Errorf("encodeData : invalid float64 value for counter %d", row.CounterId)
-		}
-
-		data := make([]byte, 12)
-
-		binary.LittleEndian.PutUint32(data, 8)
-
-		binary.LittleEndian.PutUint64(data[4:], math.Float64bits(val))
-
-		return data, nil
-
-	case TypeString:
-
-		str, ok := row.Value.(string)
-
-		if !ok {
-
-			return nil, fmt.Errorf("encodeData : invalid string value for counter %d", row.CounterId)
-		}
-
-		data := make([]byte, 4+len(str))
-
-		binary.LittleEndian.PutUint32(data, uint32(len(str)))
-
-		copy(data[4:], str)
-
-		return data, nil
-
-	default:
-
-		return nil, fmt.Errorf("encodeData : unsupported data type: %d", dataType)
+		writer.waitGroup.Wait()
 	}
 }

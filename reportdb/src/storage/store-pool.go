@@ -12,7 +12,7 @@ import (
 type StorePool struct {
 	storePool map[string]*StoreEngine // map["./database/YYYY/MM/DD/counter_1"]
 
-	poolMutex *sync.RWMutex
+	lock *sync.RWMutex
 
 	shutdown chan bool
 }
@@ -23,7 +23,7 @@ func NewStorePool() *StorePool {
 
 		storePool: make(map[string]*StoreEngine),
 
-		poolMutex: &sync.RWMutex{},
+		lock: &sync.RWMutex{},
 
 		shutdown: make(chan bool, 1),
 	}
@@ -33,31 +33,29 @@ func (storePool *StorePool) GetEngine(path string, isForPut bool) (*StoreEngine,
 
 	// Reading From storePool
 
-	storePool.poolMutex.RLock()
+	storePool.lock.RLock()
 
 	if engine, exists := storePool.storePool[path]; exists {
 
-		storePool.poolMutex.RUnlock()
+		storePool.lock.RUnlock()
 
 		return engine, nil
 	}
 
-	storePool.poolMutex.RUnlock()
+	storePool.lock.RUnlock()
 
 	// Updating Into storePool
 
-	storePool.poolMutex.Lock()
+	storePool.lock.Lock()
 
-	defer storePool.poolMutex.Unlock()
+	defer storePool.lock.Unlock()
 
 	if engine, exists := storePool.storePool[path]; exists {
 
 		return engine, nil
 	}
 
-	isEngineAvailable := storePool.engineAvailable(path)
-
-	if !isForPut && !isEngineAvailable {
+	if !isForPut && !storePool.engineAvailable(path) {
 
 		return nil, fmt.Errorf("engine %s is not available", path)
 	}
@@ -119,13 +117,13 @@ func (storePool *StorePool) flushAllEngines() {
 
 	currentTime := time.Now().Unix()
 
-	storePool.poolMutex.RLock()
+	storePool.lock.RLock()
 
-	defer storePool.poolMutex.RUnlock()
+	defer storePool.lock.RUnlock()
 
 	for _, engine := range storePool.storePool {
 
-		if engine.isUsedPut == true && currentTime-engine.lastSave >= 2 {
+		if engine.isUsedPut == true && currentTime-engine.lastSave >= 5 {
 
 			engine.lastSave = currentTime
 
@@ -143,7 +141,7 @@ func (storePool *StorePool) Shutdown() {
 
 	storePool.shutdown <- true
 
-	storePool.poolMutex.Lock()
+	storePool.lock.Lock()
 
 	currentTime := time.Now().Unix()
 
@@ -160,5 +158,5 @@ func (storePool *StorePool) Shutdown() {
 		}
 	}
 
-	storePool.poolMutex.Unlock()
+	storePool.lock.Unlock()
 }

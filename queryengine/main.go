@@ -24,9 +24,9 @@ func main() {
 
 		ObjectID: 3,
 
-		From: 1744372915,
+		From: 1744636048,
 
-		To: uint32(time.Now().Unix() + 25),
+		To: uint32(time.Now().Unix() + 500),
 	}
 
 	for {
@@ -44,8 +44,6 @@ func main() {
 			fmt.Printf("Received response: %+v\n", response)
 		}()
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(3 * time.Second)
 	}
-
-	time.Sleep(5 * time.Second)
 }

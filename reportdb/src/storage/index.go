@@ -1,4 +1,4 @@
-package helper
+package storage
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 type IndexManager struct {
 	indexHandles map[uint8]*IndexHandle // indexHandles[indexId]
 
-	handleMutex *sync.RWMutex
+	lock *sync.RWMutex
 
 	baseDir string // ./database/YYYY/MM/DD/counter_1
 }
@@ -21,7 +21,7 @@ type IndexManager struct {
 type IndexHandle struct {
 	indexMapping map[uint32][]*IndexEntry // IndexMap[key][]*IndexEntry
 
-	indexMutex *sync.RWMutex
+	lock *sync.RWMutex
 }
 
 type IndexEntry struct {
@@ -36,7 +36,7 @@ func NewIndexManager(baseDir string) *IndexManager {
 
 		indexHandles: make(map[uint8]*IndexHandle),
 
-		handleMutex: &sync.RWMutex{},
+		lock: &sync.RWMutex{},
 
 		baseDir: baseDir,
 	}
@@ -46,9 +46,9 @@ func (indexManager *IndexManager) Update(key uint32, offset int64, timestamp uin
 
 	indexHandle := indexManager.getIndexHandle(indexId)
 
-	indexHandle.indexMutex.Lock()
+	indexHandle.lock.Lock()
 
-	defer indexHandle.indexMutex.Unlock()
+	defer indexHandle.lock.Unlock()
 
 	entryList, exists := indexHandle.indexMapping[key]
 
@@ -63,7 +63,7 @@ func (indexManager *IndexManager) Update(key uint32, offset int64, timestamp uin
 
 		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".json"
 
-		err := loadIndexFile(indexFilePath, indexHandle, indexId)
+		err := loadIndexFile(indexFilePath, indexHandle)
 
 		if err != nil {
 
@@ -85,24 +85,26 @@ func (indexManager *IndexManager) Update(key uint32, offset int64, timestamp uin
 
 }
 
+// This is function only used by Get
+
 func (indexManager *IndexManager) GetIndexMapEntryList(objectId uint32, indexId uint8) ([]*IndexEntry, error) {
 
 	indexHandle := indexManager.getIndexHandle(indexId)
 
-	indexHandle.indexMutex.RLock()
+	indexHandle.lock.RLock()
 
 	entryList, exists := indexHandle.indexMapping[objectId]
 
-	indexHandle.indexMutex.RUnlock()
+	indexHandle.lock.RUnlock()
 
 	if exists {
 
 		return entryList, nil
 	}
 
-	indexHandle.indexMutex.Lock()
+	indexHandle.lock.Lock()
 
-	defer indexHandle.indexMutex.Unlock()
+	defer indexHandle.lock.Unlock()
 
 	if entryList, exists = indexHandle.indexMapping[objectId]; exists {
 
@@ -113,7 +115,7 @@ func (indexManager *IndexManager) GetIndexMapEntryList(objectId uint32, indexId 
 
 		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".json"
 
-		err := loadIndexFile(indexFilePath, indexHandle, indexId)
+		err := loadIndexFile(indexFilePath, indexHandle)
 
 		if err != nil {
 
@@ -126,20 +128,20 @@ func (indexManager *IndexManager) GetIndexMapEntryList(objectId uint32, indexId 
 
 func (indexManager *IndexManager) getIndexHandle(indexId uint8) *IndexHandle {
 
-	indexManager.handleMutex.RLock()
+	indexManager.lock.RLock()
 
 	handle, exists := indexManager.indexHandles[indexId]
 
-	indexManager.handleMutex.RUnlock()
+	indexManager.lock.RUnlock()
 
 	if exists {
 
 		return handle
 	}
 
-	indexManager.handleMutex.Lock()
+	indexManager.lock.Lock()
 
-	defer indexManager.handleMutex.Unlock()
+	defer indexManager.lock.Unlock()
 
 	if handle, exists = indexManager.indexHandles[indexId]; exists {
 
@@ -150,13 +152,13 @@ func (indexManager *IndexManager) getIndexHandle(indexId uint8) *IndexHandle {
 
 		indexMapping: make(map[uint32][]*IndexEntry),
 
-		indexMutex: &sync.RWMutex{},
+		lock: &sync.RWMutex{},
 	}
 
 	return indexManager.indexHandles[indexId]
 }
 
-func loadIndexFile(indexFilePath string, handle *IndexHandle, indexId uint8) error {
+func loadIndexFile(indexFilePath string, handle *IndexHandle) error {
 
 	if _, err := os.Stat(indexFilePath); err != nil {
 
@@ -180,19 +182,19 @@ func loadIndexFile(indexFilePath string, handle *IndexHandle, indexId uint8) err
 
 func (indexManager *IndexManager) Save() error {
 
-	indexManager.handleMutex.Lock()
+	indexManager.lock.Lock()
 
-	defer indexManager.handleMutex.Unlock()
+	defer indexManager.lock.Unlock()
 
 	for index, handle := range indexManager.indexHandles {
 
-		handle.indexMutex.Lock()
+		handle.lock.Lock()
 
 		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(index)) + ".json"
 
 		if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
 
-			handle.indexMutex.Unlock()
+			handle.lock.Unlock()
 
 			return err
 		}
@@ -201,19 +203,19 @@ func (indexManager *IndexManager) Save() error {
 
 		if err != nil {
 
-			handle.indexMutex.Unlock()
+			handle.lock.Unlock()
 
 			return err
 		}
 
 		if err := os.WriteFile(indexFilePath, data, 0644); err != nil {
 
-			handle.indexMutex.Unlock()
+			handle.lock.Unlock()
 
 			return err
 		}
 
-		handle.indexMutex.Unlock()
+		handle.lock.Unlock()
 	}
 
 	return nil

@@ -7,20 +7,26 @@ import (
 	"path/filepath"
 )
 
-var GlobalShutdown bool
-
 type ConfigType = string
 
 const (
-	Writers ConfigType = "writers"
+	writers ConfigType = "writers"
 
-	Readers ConfigType = "readers"
+	readers ConfigType = "readers"
 
-	Partitions ConfigType = "partitions"
+	partitions ConfigType = "partitions"
 
-	WriterEventBuffer ConfigType = "writerEventBuffer"
+	eventsBuffer ConfigType = "eventsBuffer"
 
-	FileGrowthSize ConfigType = "fileGrowthSize"
+	queryWorkers ConfigType = "queryWorkers"
+
+	queryBuffer ConfigType = "queryBuffer"
+
+	dayWorkers ConfigType = "dayWorkers"
+
+	writerEventBuffer ConfigType = "writerEventBuffer"
+
+	fileGrowthSize ConfigType = "fileGrowthSize"
 )
 
 var WorkingDirectory ConfigType
@@ -42,11 +48,7 @@ var counterMapping = map[uint16]DataType{}
 type Interval string
 
 const (
-	StopTime Interval = "stopPolling"
-
 	SaveIndexInterval Interval = "saveIndexInterval"
-
-	StopIndexSaving Interval = "stopIndexSaving"
 )
 
 var intervalMapping = map[Interval]int64{}
@@ -72,6 +74,8 @@ func InitConfig() error {
 
 	WorkingDirectory = filepath.Dir(currentPath) // ./reportdb
 
+	// Read config.json
+
 	configPath := WorkingDirectory + "/config/config.json"
 
 	configData, err := os.ReadFile(configPath)
@@ -85,6 +89,8 @@ func InitConfig() error {
 
 		return fmt.Errorf("parse config.json file error: %s", err)
 	}
+
+	// Read counter.json
 
 	counterPath := WorkingDirectory + "/config/counter.json"
 
@@ -130,6 +136,8 @@ func InitConfig() error {
 
 	tempCounterMapping = nil
 
+	// Read timer.go
+
 	timerPath := WorkingDirectory + "/config/timer.json"
 
 	timerData, err := os.ReadFile(timerPath)
@@ -159,7 +167,7 @@ func GetWorkingDirectory() (ConfigType, error) {
 
 func GetWriters() (uint8, error) {
 
-	value, ok := configMapping[Writers]
+	value, ok := configMapping[writers]
 
 	if !ok {
 
@@ -171,7 +179,7 @@ func GetWriters() (uint8, error) {
 
 func GetReaders() (uint8, error) {
 
-	value, ok := configMapping[Readers]
+	value, ok := configMapping[readers]
 
 	if !ok {
 
@@ -183,7 +191,7 @@ func GetReaders() (uint8, error) {
 
 func GetPartitions() (uint8, error) {
 
-	value, ok := configMapping[Partitions]
+	value, ok := configMapping[partitions]
 
 	if !ok {
 
@@ -193,9 +201,57 @@ func GetPartitions() (uint8, error) {
 	return uint8(value), nil
 }
 
-func GetEventsBuffer() (uint16, error) {
+func GetEventsBuffer() (uint8, error) {
 
-	value, ok := configMapping[WriterEventBuffer]
+	value, ok := configMapping[eventsBuffer]
+
+	if !ok {
+
+		return 0, fmt.Errorf("InitConfig : events buffer not found")
+	}
+
+	return uint8(value), nil
+}
+
+func GetQueryWorkers() (uint8, error) {
+
+	value, ok := configMapping[queryWorkers]
+
+	if !ok {
+
+		return 0, fmt.Errorf("InitConfig : queryWorkers not found")
+	}
+
+	return uint8(value), nil
+}
+
+func GetQueryBuffer() (uint8, error) {
+
+	value, ok := configMapping[queryBuffer]
+
+	if !ok {
+
+		return 0, fmt.Errorf("InitConfig : queryBuffer not found")
+	}
+
+	return uint8(value), nil
+}
+
+func GetDayWorkers() (uint8, error) {
+
+	value, ok := configMapping[dayWorkers]
+
+	if !ok {
+
+		return 0, fmt.Errorf("InitConfig : dayWorkers not found")
+	}
+
+	return uint8(value), nil
+}
+
+func GetWriterEventBuffer() (uint16, error) {
+
+	value, ok := configMapping[writerEventBuffer]
 
 	if !ok {
 
@@ -207,7 +263,7 @@ func GetEventsBuffer() (uint16, error) {
 
 func GetFileGrowthSize() (int64, error) {
 
-	value, ok := configMapping[FileGrowthSize]
+	value, ok := configMapping[fileGrowthSize]
 
 	if !ok {
 

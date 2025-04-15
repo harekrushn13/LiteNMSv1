@@ -11,14 +11,7 @@ func DistributeData(dataChannel chan []Events, writers []*Writer) {
 
 		defer ShutdownWriters(writers)
 
-		numWriters, err := GetWriters()
-
-		if err != nil {
-
-			log.Printf("distributeData error : %v", err)
-
-			return
-		}
+		numWriters := uint8(len(writers))
 
 		for batch := range dataChannel {
 

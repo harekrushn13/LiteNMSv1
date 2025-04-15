@@ -5,11 +5,7 @@ import (
 	"fmt"
 	"github.com/pebbe/zmq4"
 	"log"
-	. "reportdb/datastore/reader"
-	. "reportdb/storage"
 	. "reportdb/utils"
-	"sync"
-	"time"
 )
 
 type QueryServer struct {
@@ -19,26 +15,12 @@ type QueryServer struct {
 
 	context *zmq4.Context
 
-	storePool *StorePool
+	shutdownPull chan bool
 
-	workerPool chan struct{}
-
-	shutdown chan bool
-
-	waitGroup *sync.WaitGroup
+	shutdownPub chan bool
 }
 
-type Response struct {
-	RequestID string `json:"request_id"`
-
-	Data interface{} `json:"data"`
-
-	Error string `json:"error,omitempty"`
-
-	Timestamp time.Time `json:"timestamp"`
-}
-
-func NewQueryServer(workerCount int, storePool *StorePool) (*QueryServer, error) {
+func NewQueryServer(queryChannel chan Query, resultChannel chan Response) (*QueryServer, error) {
 
 	context, err := zmq4.NewContext()
 
@@ -95,40 +77,31 @@ func NewQueryServer(workerCount int, storePool *StorePool) (*QueryServer, error)
 
 		context: context,
 
-		storePool: storePool,
+		shutdownPull: make(chan bool, 1),
 
-		workerPool: make(chan struct{}, workerCount),
-
-		shutdown: make(chan bool, 1),
-
-		waitGroup: &sync.WaitGroup{},
+		shutdownPub: make(chan bool, 1),
 	}
 
-	for i := 0; i < workerCount; i++ {
+	go server.queryHandler(queryChannel)
 
-		server.workerPool <- struct{}{}
-	}
-
-	go server.queryHandler()
+	go server.responseHandler(resultChannel)
 
 	return server, nil
 }
 
-func (queryServer *QueryServer) queryHandler() {
+func (queryServer *QueryServer) queryHandler(queryChannel chan Query) {
 
 	for {
 
 		select {
 
-		case <-queryServer.shutdown:
-
-			queryServer.pubSocket.Close()
+		case <-queryServer.shutdownPull:
 
 			queryServer.pullSocket.Close()
 
-			//queryServer.waitGroup.Wait()
+			close(queryChannel)
 
-			queryServer.shutdown <- true
+			queryServer.shutdownPull <- true
 
 			return
 
@@ -143,84 +116,67 @@ func (queryServer *QueryServer) queryHandler() {
 				continue
 			}
 
-			<-queryServer.workerPool
+			var query Query
 
-			//queryServer.waitGroup.Add(1)
+			if err := json.Unmarshal(msg, &query); err != nil {
 
-			go func(msg []byte) {
+				log.Printf("QueryServer : Error unmarshaling query: %v", err)
 
-				defer func() {
+				return
+			}
 
-					queryServer.workerPool <- struct{}{}
-
-					//queryServer.waitGroup.Done()
-
-				}()
-
-				var query Query
-
-				if err := json.Unmarshal(msg, &query); err != nil {
-
-					log.Printf("QueryServer : Error unmarshaling query: %v", err)
-
-					return
-				}
-
-				response := queryServer.processQuery(query)
-
-				responseBytes, err := json.Marshal(response)
-
-				if err != nil {
-
-					log.Printf("QueryServer : Error marshaling response: %v", err)
-
-					return
-				}
-
-				if _, err := queryServer.pubSocket.SendBytes(responseBytes, 0); err != nil {
-
-					log.Printf("QueryServer : Error sending response: %v", err)
-
-					return
-				}
-
-			}(msg)
+			queryChannel <- query
 		}
 	}
 }
 
-func (queryServer *QueryServer) processQuery(query Query) Response {
+func (queryServer *QueryServer) responseHandler(resultChannel chan Response) {
 
-	response, err := FetchData(query, queryServer.storePool)
+	for {
 
-	if err != nil {
+		select {
 
-		return Response{
+		case <-queryServer.shutdownPub:
 
-			RequestID: query.RequestID,
+			queryServer.pubSocket.Close()
 
-			Error: err.Error(),
+			close(resultChannel)
 
-			Timestamp: time.Now(),
+			queryServer.shutdownPub <- true
+
+			return
+
+		case response := <-resultChannel:
+
+			responseBytes, err := json.Marshal(response)
+
+			if err != nil {
+
+				log.Printf("QueryServer : Error marshaling response: %v", err)
+
+				return
+			}
+
+			if _, err := queryServer.pubSocket.SendBytes(responseBytes, 0); err != nil {
+
+				log.Printf("QueryServer : Error sending response: %v", err)
+
+				return
+			}
+
 		}
-
-	}
-
-	return Response{
-
-		RequestID: query.RequestID,
-
-		Data: response,
-
-		Timestamp: time.Now(),
 	}
 }
 
 func (queryServer *QueryServer) Shutdown() {
 
-	queryServer.shutdown <- true
+	queryServer.shutdownPull <- true
+
+	queryServer.shutdownPub <- true
 
 	queryServer.context.Term()
 
-	<-queryServer.shutdown
+	<-queryServer.shutdownPull
+
+	<-queryServer.shutdownPub
 }
