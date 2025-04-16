@@ -16,6 +16,8 @@ type Writer struct {
 	storePool *StorePool
 
 	waitGroup *sync.WaitGroup
+
+	data []byte
 }
 
 func initializeWriters(storePool *StorePool) ([]*Writer, error) {
@@ -47,6 +49,8 @@ func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 			storePool: storePool,
 
 			waitGroup: &sync.WaitGroup{},
+
+			data: make([]byte, 256),
 		}
 	}
 
@@ -97,7 +101,9 @@ func (writer *Writer) runWriter(workingDirectory string) {
 				continue
 			}
 
-			data, err := encodeData(row)
+			_ = writer.data[:0]
+
+			lastIndex, err := encodeData(row, writer.data)
 
 			if err != nil {
 
@@ -106,7 +112,7 @@ func (writer *Writer) runWriter(workingDirectory string) {
 				continue
 			}
 
-			err = store.Put(row.ObjectId, row.Timestamp, data)
+			err = store.Put(row.ObjectId, row.Timestamp, writer.data[:lastIndex])
 
 			if err != nil {
 

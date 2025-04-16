@@ -176,16 +176,21 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
+
+		if _, exits := reader.dayResultMapping[path]; exits && !reader.storePool.CheckEngineUsedPut(path) {
+
+			continue
+		}
+
 		<-reader.dayPool
 
-		go func() {
+		go func(path string) {
 
 			defer func() {
 
 				reader.dayPool <- struct{}{}
 			}()
-
-			path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
 
 			store, err := reader.storePool.GetEngine(path, false)
 
@@ -208,12 +213,12 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 			reader.lock.Lock()
 
-			reader.dayResultMapping[current.Format("2006/01/02")] = dayResult
+			reader.dayResultMapping[path] = dayResult
 
 			reader.lock.Unlock()
 
 			return
-		}()
+		}(path)
 	}
 
 	var results []interface{}
@@ -222,7 +227,9 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
-		data, exits := reader.dayResultMapping[current.Format("2006/01/02")]
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
+
+		data, exits := reader.dayResultMapping[path]
 
 		if exits {
 

@@ -16,13 +16,13 @@ func getPath(workingDirectory string, row Events) string {
 	return workingDirectory + "/database/" + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
 }
 
-func encodeData(row Events) ([]byte, error) {
+func encodeData(row Events, data []byte) (uint8, error) {
 
 	dataType, err := GetCounterType(row.CounterId)
 
 	if err != nil {
 
-		return nil, fmt.Errorf("encodeData : Error getting counter type: %v", err)
+		return 0, fmt.Errorf("encodeData : Error getting counter type: %v", err)
 	}
 
 	switch dataType {
@@ -33,18 +33,16 @@ func encodeData(row Events) ([]byte, error) {
 
 		if !ok {
 
-			return nil, fmt.Errorf("encodeData : invalid uint64 value for counter %d", row.CounterId)
+			return 0, fmt.Errorf("encodeData : invalid uint64 value for counter %d", row.CounterId)
 		}
 
 		newvalue := uint64(val)
-
-		data := make([]byte, 12)
 
 		binary.LittleEndian.PutUint32(data, 8)
 
 		binary.LittleEndian.PutUint64(data[4:], newvalue)
 
-		return data, nil
+		return 12, nil
 
 	case TypeFloat64:
 
@@ -52,16 +50,14 @@ func encodeData(row Events) ([]byte, error) {
 
 		if !ok {
 
-			return nil, fmt.Errorf("encodeData : invalid float64 value for counter %d", row.CounterId)
+			return 0, fmt.Errorf("encodeData : invalid float64 value for counter %d", row.CounterId)
 		}
-
-		data := make([]byte, 12)
 
 		binary.LittleEndian.PutUint32(data, 8)
 
 		binary.LittleEndian.PutUint64(data[4:], math.Float64bits(val))
 
-		return data, nil
+		return 12, nil
 
 	case TypeString:
 
@@ -69,19 +65,17 @@ func encodeData(row Events) ([]byte, error) {
 
 		if !ok {
 
-			return nil, fmt.Errorf("encodeData : invalid string value for counter %d", row.CounterId)
+			return 0, fmt.Errorf("encodeData : invalid string value for counter %d", row.CounterId)
 		}
-
-		data := make([]byte, 4+len(str))
 
 		binary.LittleEndian.PutUint32(data, uint32(len(str)))
 
 		copy(data[4:], str)
 
-		return data, nil
+		return uint8(4 + len(str)), nil
 
 	default:
 
-		return nil, fmt.Errorf("encodeData : unsupported data type: %d", dataType)
+		return 0, fmt.Errorf("encodeData : unsupported data type: %d", dataType)
 	}
 }

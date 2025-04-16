@@ -16,7 +16,7 @@ type QueryEngine struct {
 
 	context *zmq4.Context
 
-	pending sync.Map
+	queryMapping sync.Map
 
 	shutdown chan bool
 }
@@ -101,20 +101,20 @@ func (qe *QueryEngine) SubmitQuery(query Query) (chan Response, error) {
 
 	responseChan := make(chan Response, 1)
 
-	qe.pending.Store(query.RequestID, responseChan)
+	qe.queryMapping.Store(query.RequestID, responseChan)
 
 	queryBytes, err := json.Marshal(query)
 
 	if err != nil {
 
-		qe.pending.Delete(query.RequestID)
+		qe.queryMapping.Delete(query.RequestID)
 
 		return nil, fmt.Errorf("failed to marshal query: %v", err)
 	}
 
 	if _, err := qe.pushSocket.SendBytes(queryBytes, 0); err != nil {
 
-		qe.pending.Delete(query.RequestID)
+		qe.queryMapping.Delete(query.RequestID)
 
 		return nil, fmt.Errorf("failed to send query: %v", err)
 	}
@@ -158,11 +158,11 @@ func (qe *QueryEngine) responseHandler() {
 				continue
 			}
 
-			if ch, ok := qe.pending.Load(response.RequestID); ok {
+			if ch, ok := qe.queryMapping.Load(response.RequestID); ok {
 
 				ch.(chan Response) <- response
 
-				qe.pending.Delete(response.RequestID)
+				qe.queryMapping.Delete(response.RequestID)
 			}
 		}
 	}

@@ -160,3 +160,17 @@ func (storePool *StorePool) Shutdown() {
 
 	storePool.lock.Unlock()
 }
+
+func (storePool *StorePool) CheckEngineUsedPut(day string) bool {
+
+	storePool.lock.RLock()
+
+	defer storePool.lock.RUnlock()
+
+	if engine, exists := storePool.storePool[day]; exists && engine.isUsedPut == true {
+
+		return true
+	}
+
+	return false
+}
