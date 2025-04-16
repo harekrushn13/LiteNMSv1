@@ -85,13 +85,13 @@ func main() {
 
 	DistributeData(dataChannel, writers)
 
-	// query resultChannel
+	// query responseChannel
 
-	resultChannel := make(chan Response, 3)
+	responseChannel := make(chan Response, 3)
 
 	// Initialise multiple readers
 
-	readers, err := StartReaders(storePool, resultChannel)
+	readers, err := StartReaders(storePool, responseChannel)
 
 	if err != nil {
 
@@ -106,7 +106,7 @@ func main() {
 
 	// Initialise queryServer to receive query from clients
 
-	queryServer, err := NewQueryServer(queryChannel, resultChannel)
+	queryServer, err := NewQueryServer(queryChannel, responseChannel)
 
 	if err != nil {
 

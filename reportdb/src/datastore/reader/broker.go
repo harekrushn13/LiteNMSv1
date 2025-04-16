@@ -19,9 +19,9 @@ func DistributeQuery(queryChannel chan Query, readers []*Reader) {
 
 			if index >= numReaders || index < 0 {
 
-				log.Printf("distributeData error : Writer index is out of range")
+				log.Printf("DistributeQuery error : Query index is out of range")
 
-				return
+				continue
 			}
 
 			readers[index].queryEvents <- query

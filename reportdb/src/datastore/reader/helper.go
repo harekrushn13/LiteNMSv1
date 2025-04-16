@@ -6,9 +6,7 @@ import (
 	. "reportdb/utils"
 )
 
-func decodeData(data [][]byte, dataType DataType) []interface{} {
-
-	var result []interface{}
+func decodeData(data [][]byte, dataType DataType, result *[]interface{}) {
 
 	for _, row := range data {
 
@@ -16,18 +14,16 @@ func decodeData(data [][]byte, dataType DataType) []interface{} {
 
 		case TypeUint64:
 
-			result = append(result, binary.LittleEndian.Uint64(row))
+			*result = append(*result, binary.LittleEndian.Uint64(row))
 
 		case TypeFloat64:
 
-			result = append(result, math.Float64frombits(binary.LittleEndian.Uint64(row)))
+			*result = append(*result, math.Float64frombits(binary.LittleEndian.Uint64(row)))
 
 		case TypeString:
 
-			result = append(result, string(row))
+			*result = append(*result, string(row))
 
 		}
 	}
-
-	return result
 }

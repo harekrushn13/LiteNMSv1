@@ -10,22 +10,41 @@ import (
 	"time"
 )
 
-type Reader struct {
+type Reader struct { // reader
 	id uint8
 
-	dayPool chan struct{}
+	dayPool chan struct{} // to read multiple day in parallel for query
 
-	queryEvents chan Query
+	queryEvents chan Query // channel to take query from query distributor
 
-	resultChannel chan Response
+	resultChannel chan Response // channel to send query result
 
 	storePool *StorePool
 
-	waitGroup *sync.WaitGroup
+	waitGroup *sync.WaitGroup // to wait completion of all reader
 
-	dayResultMapping map[string][][]byte
+	dayResultMapping map[string][][]byte // keep day-result mapping for caching
+
+	results []interface{} //
 
 	lock *sync.Mutex
+}
+
+func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
+
+	readers, err := initializeReaders(storePool, resultChannel)
+
+	if err != nil {
+
+		return readers, fmt.Errorf("startReaders : Error initializing readers: %v", err)
+	}
+
+	for _, reader := range readers {
+
+		reader.runReader()
+	}
+
+	return readers, nil
 }
 
 func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
@@ -71,6 +90,8 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			dayResultMapping: make(map[string][][]byte),
 
+			results: make([]interface{}, 0, 10000),
+
 			lock: &sync.Mutex{},
 		}
 
@@ -78,23 +99,6 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			readers[i].dayPool <- struct{}{}
 		}
-	}
-
-	return readers, nil
-}
-
-func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
-
-	readers, err := initializeReaders(storePool, resultChannel)
-
-	if err != nil {
-
-		return readers, fmt.Errorf("startReaders : Error initializing readers: %v", err)
-	}
-
-	for _, reader := range readers {
-
-		reader.runReader()
 	}
 
 	return readers, nil
@@ -174,20 +178,26 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 		return nil, fmt.Errorf("reader.GetWorkingDirectory error : %v", err)
 	}
 
+	wg := &sync.WaitGroup{}
+
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
 		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
 
-		if _, exits := reader.dayResultMapping[path]; exits && !reader.storePool.CheckEngineUsedPut(path) {
+		if _, exists := reader.dayResultMapping[path]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
 
 			continue
 		}
 
 		<-reader.dayPool
 
+		wg.Add(1)
+
 		go func(path string) {
 
 			defer func() {
+
+				wg.Done()
 
 				reader.dayPool <- struct{}{}
 			}()
@@ -213,38 +223,40 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 			reader.lock.Lock()
 
-			reader.dayResultMapping[path] = dayResult
+			if current.After(fromTime) && current.Before(toTime) {
+
+				reader.dayResultMapping[path] = dayResult
+			}
 
 			reader.lock.Unlock()
 
 			return
+
 		}(path)
 	}
 
-	var results []interface{}
+	wg.Wait()
 
 	reader.lock.Lock()
+
+	reader.results = reader.results[:0]
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
 		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
 
-		data, exits := reader.dayResultMapping[path]
+		if data, exists := reader.dayResultMapping[path]; exists {
 
-		if exits {
-
-			results = append(results, decodeData(data, dataType)...)
+			decodeData(data, dataType, &reader.results)
 		}
 	}
 
 	reader.lock.Unlock()
 
-	if len(results) == 0 {
+	if len(reader.results) == 0 {
 
 		return nil, fmt.Errorf("no data found in time range %d-%d", query.From, query.To)
 	}
 
-	fmt.Println("results:", results)
-
-	return results, nil
+	return reader.results, nil
 }

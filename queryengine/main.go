@@ -29,21 +29,32 @@ func main() {
 		To: uint32(time.Now().Unix() + 500),
 	}
 
+	ticker := time.NewTicker(3 * time.Second)
+
+	defer ticker.Stop()
+
 	for {
 
-		go func() {
-			response, err := client.ExecuteQuery(query)
+		select {
 
-			if err != nil {
+		case <-ticker.C:
 
-				log.Printf("Query failed: %v", err)
+			go generateQuery(client, query)
+		}
 
-				return
-			}
-
-			fmt.Printf("Received response: %+v\n", response)
-		}()
-
-		time.Sleep(3 * time.Second)
 	}
+}
+
+func generateQuery(client *Client, query common.Query) {
+
+	response, err := client.ExecuteQuery(query)
+
+	if err != nil {
+
+		log.Printf("Query failed: %v", err)
+
+		return
+	}
+
+	fmt.Printf("Received response: %+v\n", len(response.Data.([]interface{})))
 }

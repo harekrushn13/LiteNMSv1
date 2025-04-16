@@ -23,7 +23,7 @@ func DistributeData(dataChannel chan []Events, writers []*Writer) {
 
 					log.Printf("distributeData error : Writer index is out of range")
 
-					return
+					continue
 				}
 
 				writers[index].events <- row

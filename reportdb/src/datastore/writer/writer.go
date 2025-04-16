@@ -17,7 +17,32 @@ type Writer struct {
 
 	waitGroup *sync.WaitGroup
 
-	data []byte
+	data []byte // for serializing data
+}
+
+func StartWriter(storePool *StorePool) ([]*Writer, error) {
+
+	writers, err := initializeWriters(storePool)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("StartWriter : Error getting writers: %v", err)
+	}
+
+	workingDirectory, err := GetWorkingDirectory()
+
+	if err != nil {
+
+		return nil, fmt.Errorf("writer.runWriter : Error getting working directory: %v", err)
+
+	}
+
+	for _, writer := range writers {
+
+		writer.runWriter(workingDirectory)
+	}
+
+	return writers, nil
 }
 
 func initializeWriters(storePool *StorePool) ([]*Writer, error) {
@@ -57,31 +82,6 @@ func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 	return writers, nil
 }
 
-func StartWriter(storePool *StorePool) ([]*Writer, error) {
-
-	writers, err := initializeWriters(storePool)
-
-	if err != nil {
-
-		return nil, fmt.Errorf("StartWriter : Error getting writers: %v", err)
-	}
-
-	workingDirectory, err := GetWorkingDirectory()
-
-	if err != nil {
-
-		return nil, fmt.Errorf("writer.runWriter : Error getting working directory: %v", err)
-
-	}
-
-	for _, writer := range writers {
-
-		writer.runWriter(workingDirectory)
-	}
-
-	return writers, nil
-}
-
 func (writer *Writer) runWriter(workingDirectory string) {
 
 	writer.waitGroup.Add(1)
@@ -101,9 +101,9 @@ func (writer *Writer) runWriter(workingDirectory string) {
 				continue
 			}
 
-			_ = writer.data[:0]
+			writer.data = writer.data[:0]
 
-			lastIndex, err := encodeData(row, writer.data)
+			lastIndex, err := encodeData(row, &writer.data)
 
 			if err != nil {
 
