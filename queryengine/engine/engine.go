@@ -97,7 +97,7 @@ func NewQueryEngine() (*QueryEngine, error) {
 	return engine, nil
 }
 
-func (qe *QueryEngine) SubmitQuery(query Query) (chan Response, error) {
+func (qe *QueryEngine) SendQuery(query Query) (chan Response, error) {
 
 	responseChan := make(chan Response, 1)
 

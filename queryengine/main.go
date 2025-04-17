@@ -50,7 +50,7 @@ func main() {
 
 func generateQuery(client *Client, query common.Query) {
 
-	response, err := client.ExecuteQuery(query)
+	response, err := client.RunQuery(query)
 
 	if err != nil {
 

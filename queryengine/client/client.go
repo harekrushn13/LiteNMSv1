@@ -24,13 +24,13 @@ func NewClient() (*Client, error) {
 	return &Client{engine: engine}, nil
 }
 
-func (client *Client) ExecuteQuery(query Query) (*Response, error) {
+func (client *Client) RunQuery(query Query) (*Response, error) {
 
 	query.RequestID = uint64(uuid.New().ID())
 
 	query.Timestamp = time.Now()
 
-	responseChan, err := client.engine.SubmitQuery(query)
+	responseChan, err := client.engine.SendQuery(query)
 
 	if err != nil {
 
