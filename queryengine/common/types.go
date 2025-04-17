@@ -27,8 +27,6 @@ type Response struct {
 }
 
 const (
-	QueryTimeout = 30 * time.Second
-
 	QueryAddress = "tcp://localhost:6001"
 
 	ResponseAddress = "tcp://localhost:6002"

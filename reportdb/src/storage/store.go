@@ -103,7 +103,7 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 
 	defer handle.lock.RUnlock()
 
-	var dayResults [][]byte
+	var dayResult [][]byte
 
 	for _, offset := range validOffsets {
 
@@ -119,14 +119,10 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 			return nil, fmt.Errorf("record at offset %d extends beyond file bounds", offset)
 		}
 
-		record := make([]byte, length)
-
-		copy(record, handle.mappedBuffer[offset+4:offset+4+int64(length)])
-
-		dayResults = append(dayResults, record)
+		dayResult = append(dayResult, handle.mappedBuffer[offset+4:offset+4+int64(length)])
 	}
 
-	return dayResults, nil
+	return dayResult, nil
 }
 
 func getPartitionId(key uint32) (uint8, error) {

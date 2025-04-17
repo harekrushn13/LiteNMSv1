@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	. "queryengine/client"
 	"queryengine/common"
 	"time"
@@ -18,26 +19,28 @@ func main() {
 
 	defer client.Close()
 
-	query := common.Query{
-
-		CounterID: 3,
-
-		ObjectID: 3,
-
-		From: 1744636048,
-
-		To: uint32(time.Now().Unix() + 500),
-	}
-
 	ticker := time.NewTicker(3 * time.Second)
 
 	defer ticker.Stop()
+
+	rand.Seed(time.Now().UnixNano())
 
 	for {
 
 		select {
 
 		case <-ticker.C:
+
+			query := common.Query{
+
+				CounterID: uint16(rand.Intn(3) + 1),
+
+				ObjectID: uint32(rand.Intn(5) + 1),
+
+				From: 1744636048,
+
+				To: uint32(time.Now().Unix() + 700),
+			}
 
 			go generateQuery(client, query)
 		}

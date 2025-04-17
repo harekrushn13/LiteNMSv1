@@ -23,9 +23,9 @@ type Reader struct { // reader
 
 	waitGroup *sync.WaitGroup // to wait completion of all reader
 
-	dayResultMapping map[string][][]byte // keep day-result mapping for caching
+	dayResultMapping map[string]map[uint32][][]byte // keep day-result mapping for caching counter_id-object_id
 
-	results []interface{} //
+	results []interface{} // final result of query
 
 	lock *sync.Mutex
 }
@@ -88,7 +88,7 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			waitGroup: &sync.WaitGroup{},
 
-			dayResultMapping: make(map[string][][]byte),
+			dayResultMapping: make(map[string]map[uint32][][]byte),
 
 			results: make([]interface{}, 0, 10000),
 
@@ -184,7 +184,7 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
 
-		if _, exists := reader.dayResultMapping[path]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
+		if _, exists := reader.dayResultMapping[path][query.ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
 
 			continue
 		}
@@ -223,10 +223,16 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 			reader.lock.Lock()
 
-			if current.After(fromTime) && current.Before(toTime) {
+			objectsMap, exists := reader.dayResultMapping[path]
 
-				reader.dayResultMapping[path] = dayResult
+			if !exists {
+
+				objectsMap = make(map[uint32][][]byte)
+
+				reader.dayResultMapping[path] = objectsMap
 			}
+
+			reader.dayResultMapping[path][query.ObjectId] = dayResult
 
 			reader.lock.Unlock()
 
@@ -245,9 +251,15 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
 
-		if data, exists := reader.dayResultMapping[path]; exists {
+		if data, exists := reader.dayResultMapping[path][query.ObjectId]; exists {
 
 			decodeData(data, dataType, &reader.results)
+
+			if !current.After(fromTime) || !current.Before(toTime) {
+
+				delete(reader.dayResultMapping[path], query.ObjectId)
+
+			}
 		}
 	}
 

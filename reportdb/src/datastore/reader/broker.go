@@ -15,7 +15,7 @@ func DistributeQuery(queryChannel chan Query, readers []*Reader) {
 
 		for query := range queryChannel {
 
-			index := uint8(query.RequestID % uint64(numReaders))
+			index := uint8((query.ObjectId + uint32(query.CounterId)) % uint32(numReaders))
 
 			if index >= numReaders || index < 0 {
 

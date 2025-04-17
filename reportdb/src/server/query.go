@@ -164,6 +164,7 @@ func (queryServer *QueryServer) responseHandler(resultChannel chan Response) {
 				return
 			}
 
+			fmt.Println("response :", len(response.Data.([]interface{})))
 		}
 	}
 }

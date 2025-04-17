@@ -12,6 +12,7 @@ import (
 	. "reportdb/server"
 	. "reportdb/storage"
 	. "reportdb/utils"
+	"runtime"
 	"syscall"
 	"time"
 )
@@ -23,6 +24,26 @@ func main() {
 	go func() {
 
 		http.ListenAndServe("localhost:6060", nil)
+	}()
+
+	// for MemStats
+
+	var stat runtime.MemStats
+
+	statTicker := time.NewTicker(time.Minute)
+
+	go func() {
+
+		for {
+
+			select {
+
+			case <-statTicker.C:
+				runtime.ReadMemStats(&stat)
+
+				log.Printf("NumGC: %v  GCCPUFraction : %v", stat.NumGC, stat.GCCPUFraction)
+			}
+		}
 	}()
 
 	// Handle Interrupts

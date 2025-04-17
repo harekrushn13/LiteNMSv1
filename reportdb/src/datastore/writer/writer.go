@@ -75,7 +75,7 @@ func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 
 			waitGroup: &sync.WaitGroup{},
 
-			data: make([]byte, 256),
+			data: make([]byte, 100),
 		}
 	}
 
@@ -101,7 +101,7 @@ func (writer *Writer) runWriter(workingDirectory string) {
 				continue
 			}
 
-			writer.data = writer.data[:0]
+			//writer.data = writer.data[:0]
 
 			lastIndex, err := encodeData(row, &writer.data)
 

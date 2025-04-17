@@ -36,10 +36,6 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
 
 		defer batchTicker.Stop()
 
-		//stopTimer := time.NewTimer(time.Duration(GetStopTime()) * time.Millisecond)
-		//
-		//defer stopTimer.Stop()
-
 		var batch []Events
 
 		for {
@@ -100,18 +96,6 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
 					batch = nil
 				}
 
-				//case <-stopTimer.C:
-				//
-				//	if len(batch) > 0 {
-				//
-				//		fmt.Println("poll stop", batch)
-				//
-				//		out <- batch
-				//	}
-				//
-				//	close(out)
-				//
-				//	return
 			}
 
 		}

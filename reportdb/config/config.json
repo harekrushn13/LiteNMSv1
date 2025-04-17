@@ -2,7 +2,7 @@
   "writers": 5,
   "readers": 5,
   "partitions": 3,
-  "eventsBuffer": 10,
+  "eventsBuffer": 20,
   "queryWorkers": 10,
   "queryBuffer": 10,
   "dayWorkers": 5,

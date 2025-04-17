@@ -36,11 +36,9 @@ func encodeData(row Events, data *[]byte) (uint8, error) {
 			return 0, fmt.Errorf("encodeData : invalid uint64 value for counter %d", row.CounterId)
 		}
 
-		newvalue := uint64(val)
-
 		binary.LittleEndian.PutUint32(*data, 8)
 
-		binary.LittleEndian.PutUint64((*data)[4:], newvalue)
+		binary.LittleEndian.PutUint64((*data)[4:], uint64(val))
 
 		return 12, nil
 

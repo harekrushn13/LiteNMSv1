@@ -6,16 +6,12 @@ import (
 	"os"
 )
 
-var WorkingDirectory string
-
 type Interval string
 
 const (
 	PollingInterval Interval = "pollingInterval"
 
 	BatchInterval Interval = "batchInterval"
-
-	StopTime Interval = "stopPolling"
 )
 
 var intervalMapping = map[Interval]int64{}
@@ -50,8 +46,6 @@ func InitConfig() error {
 
 		return fmt.Errorf("get current path err: %v", err)
 	}
-
-	WorkingDirectory = currentPath // ./poller
 
 	timerPath := currentPath + "/config/timer.json"
 
@@ -138,13 +132,6 @@ func GetPollingInterval() int64 {
 func GetBatchInterval() int64 {
 
 	value, _ := intervalMapping[BatchInterval]
-
-	return value
-}
-
-func GetStopTime() int64 {
-
-	value, _ := intervalMapping[StopTime]
 
 	return value
 }
