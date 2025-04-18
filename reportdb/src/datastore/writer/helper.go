@@ -38,9 +38,11 @@ func encodeData(row Events, data *[]byte) (uint8, error) {
 
 		binary.LittleEndian.PutUint32(*data, 8)
 
-		binary.LittleEndian.PutUint64((*data)[4:], uint64(val))
+		binary.LittleEndian.PutUint32((*data)[4:], row.Timestamp)
 
-		return 12, nil
+		binary.LittleEndian.PutUint64((*data)[8:], uint64(val))
+
+		return 16, nil
 
 	case TypeFloat64:
 
@@ -53,9 +55,11 @@ func encodeData(row Events, data *[]byte) (uint8, error) {
 
 		binary.LittleEndian.PutUint32(*data, 8)
 
-		binary.LittleEndian.PutUint64((*data)[4:], math.Float64bits(val))
+		binary.LittleEndian.PutUint32((*data)[4:], row.Timestamp)
 
-		return 12, nil
+		binary.LittleEndian.PutUint64((*data)[8:], math.Float64bits(val))
+
+		return 16, nil
 
 	case TypeString:
 
@@ -68,9 +72,11 @@ func encodeData(row Events, data *[]byte) (uint8, error) {
 
 		binary.LittleEndian.PutUint32(*data, uint32(len(str)))
 
-		copy((*data)[4:], str)
+		binary.LittleEndian.PutUint32((*data)[4:], row.Timestamp)
 
-		return uint8(4 + len(str)), nil
+		copy((*data)[8:], str)
+
+		return uint8(8 + len(str)), nil
 
 	default:
 

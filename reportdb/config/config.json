@@ -7,5 +7,5 @@
   "queryBuffer": 10,
   "dayWorkers": 5,
   "writerEventBuffer": 50,
-  "fileGrowthSize": 256
+  "fileGrowthSize": 4096
 }

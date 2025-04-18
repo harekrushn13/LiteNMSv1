@@ -59,5 +59,5 @@ func generateQuery(client *Client, query common.Query) {
 		return
 	}
 
-	fmt.Printf("Received response: %+v\n", len(response.Data.([]interface{})))
+	fmt.Printf("Received response: %+v %+v\n", len(response.Data.([]interface{})), response.Data.([]interface{}))
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type Reader struct { // reader
+type Reader struct {
 	id uint8
 
 	dayPool chan struct{} // to read multiple day in parallel for query

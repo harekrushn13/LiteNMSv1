@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"os"
 	. "reportdb/utils"
 	"strconv"
@@ -15,7 +16,7 @@ type FileHandle struct {
 
 	availableSize int64
 
-	Offset int64
+	lastBlockEnd int64
 
 	lock *sync.RWMutex
 
@@ -27,7 +28,7 @@ type FileManager struct {
 
 	fileHandles map[uint8]*FileHandle // fileHandles[partitionId]
 
-	lock sync.RWMutex
+	lock *sync.RWMutex
 }
 
 func NewFileManager(baseDir string) *FileManager {
@@ -36,7 +37,7 @@ func NewFileManager(baseDir string) *FileManager {
 
 		fileHandles: make(map[uint8]*FileHandle),
 
-		lock: sync.RWMutex{},
+		lock: &sync.RWMutex{},
 
 		baseDir: baseDir, // ./database/YYYY/MM/DD/counter_1
 	}
@@ -71,7 +72,7 @@ func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) 
 		return nil, err
 	}
 
-	file, err := os.OpenFile(partitionFile, os.O_RDWR|os.O_CREATE, 0644)
+	file, err := os.OpenFile(partitionFile, os.O_RDWR|os.O_CREATE, 0755)
 
 	if err != nil {
 
@@ -98,13 +99,18 @@ func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) 
 
 	mappedBuffer, err := syscall.Mmap(int(handle.file.Fd()), 0, int(handle.availableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 
+	if err != nil && handle.availableSize != 0 {
+
+		return nil, fmt.Errorf("mmap error: %v", err)
+	}
+
 	if handle.availableSize > 0 {
 
-		handle.Offset = int64(binary.LittleEndian.Uint64(mappedBuffer[:8]))
+		handle.lastBlockEnd = int64(binary.LittleEndian.Uint64(mappedBuffer[:8]))
 
 	} else {
 
-		handle.Offset = handle.availableSize + 8
+		handle.lastBlockEnd = handle.availableSize + 8
 	}
 
 	handle.mappedBuffer = mappedBuffer
@@ -114,22 +120,27 @@ func (fileManager *FileManager) GetHandle(partition uint8) (*FileHandle, error) 
 	return handle, nil
 }
 
-func (fileManager *FileManager) CheckCapacity(handle *FileHandle, requiredSize int64) error {
+func (fileManager *FileManager) CheckCapacity(handle *FileHandle, entryList []*IndexEntry, requiredSize int64) ([]*IndexEntry, error) {
 
 	handle.lock.Lock()
 
 	defer handle.lock.Unlock()
 
-	if handle.Offset+requiredSize <= handle.availableSize {
+	if len(entryList) > 0 {
 
-		return nil
+		lastEntry := entryList[len(entryList)-1]
+
+		if lastEntry.EntryEnd+requiredSize <= lastEntry.BlockEnd {
+
+			return entryList, nil
+		}
 	}
 
 	if handle.mappedBuffer != nil {
 
 		if err := syscall.Munmap(handle.mappedBuffer); err != nil {
 
-			return fmt.Errorf("munmap failed: %v", err)
+			return nil, fmt.Errorf("munmap failed: %v", err)
 		}
 	}
 
@@ -137,24 +148,64 @@ func (fileManager *FileManager) CheckCapacity(handle *FileHandle, requiredSize i
 
 	if err != nil {
 
-		return err
+		return nil, err
 	}
 
-	handle.availableSize = handle.Offset + fileGrowthSize
+	handle.availableSize = handle.lastBlockEnd + fileGrowthSize
 
 	if err := handle.file.Truncate(handle.availableSize); err != nil {
 
-		return fmt.Errorf("failed to grow file: %v", err)
+		return nil, fmt.Errorf("failed to grow file: %v", err)
 	}
 
 	mappedBuffer, err := syscall.Mmap(int(handle.file.Fd()), 0, int(handle.availableSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 
 	if err != nil {
 
-		return fmt.Errorf("mmap failed: %v", err)
+		return nil, fmt.Errorf("mmap failed: %v", err)
 	}
 
 	handle.mappedBuffer = mappedBuffer
 
-	return nil
+	entryList = append(entryList, &IndexEntry{
+
+		BlockStart: handle.lastBlockEnd,
+
+		BlockEnd: handle.availableSize,
+
+		EntryStart: handle.lastBlockEnd,
+
+		EntryEnd: handle.lastBlockEnd,
+	})
+
+	handle.lastBlockEnd = handle.availableSize
+
+	binary.LittleEndian.PutUint64(handle.mappedBuffer[:8], uint64(handle.lastBlockEnd))
+
+	return entryList, nil
+}
+
+func (fileManager *FileManager) Close() {
+
+	fileManager.lock.Lock()
+
+	defer fileManager.lock.Unlock()
+
+	for _, handle := range fileManager.fileHandles {
+
+		if handle.mappedBuffer != nil {
+
+			if err := syscall.Munmap(handle.mappedBuffer); err != nil {
+
+				log.Printf("fileManager.Close munmap error: %v", err)
+			}
+		}
+
+		if err := handle.file.Close(); err != nil {
+
+			log.Printf("fileManager.Close file close error: %v", err)
+		}
+
+	}
+
 }

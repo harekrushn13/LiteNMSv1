@@ -3,7 +3,6 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,9 +18,13 @@ type IndexManager struct {
 }
 
 type IndexEntry struct {
-	TimeStamp uint32 `json:"timestamp"`
+	BlockStart int64 `json:"blockStart"`
 
-	Offset int64 `json:"offset"`
+	BlockEnd int64 `json:"blockEnd"`
+
+	EntryStart int64 `json:"entryStart"`
+
+	EntryEnd int64 `json:"entryEnd"`
 }
 
 func NewIndexManager(baseDir string) *IndexManager {
@@ -36,58 +39,23 @@ func NewIndexManager(baseDir string) *IndexManager {
 	}
 }
 
-func (indexManager *IndexManager) Update(key uint32, offset int64, timestamp uint32, indexId uint8) {
-
-	indexManager.lock.Lock()
-
-	defer indexManager.lock.Unlock()
-
-	indexMap, exists := indexManager.indexHandles[indexId]
-
-	if !exists {
-
-		indexMap = make(map[uint32][]*IndexEntry)
-
-		indexManager.indexHandles[indexId] = indexMap
-
-		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".json"
-
-		if err := loadIndexFile(indexFilePath, &indexMap); err != nil {
-
-			log.Printf("indexManager.loadIndexFile error: %v", err)
-
-			return
-		}
-
-		if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
-
-			log.Printf("Error creating index directory: %v", err)
-
-			return
-		}
-
-	}
-
-	indexMap[key] = append(indexMap[key], &IndexEntry{TimeStamp: timestamp, Offset: offset})
-}
-
-// This is function only used by Get
-
-func (indexManager *IndexManager) GetIndexMapEntryList(key uint32, indexId uint8) ([]*IndexEntry, error) {
+func (indexManager *IndexManager) GetIndexMapEntryList(key uint32, indexId uint8, isUsedPut bool) ([]*IndexEntry, error) {
 
 	indexManager.lock.RLock()
 
 	indexMap, exists := indexManager.indexHandles[indexId]
 
-	indexManager.lock.RUnlock()
-
 	if exists {
 
 		if entryList, exists := indexMap[key]; exists {
 
+			indexManager.lock.RUnlock()
+
 			return entryList, nil
 		}
 	}
+
+	indexManager.lock.RUnlock()
 
 	indexManager.lock.Lock()
 
@@ -106,6 +74,14 @@ func (indexManager *IndexManager) GetIndexMapEntryList(key uint32, indexId uint8
 		if err := loadIndexFile(indexFilePath, &indexMap); err != nil {
 
 			return nil, fmt.Errorf("indexManager.loadIndexFile error: %v", err)
+		}
+
+		if isUsedPut {
+
+			if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
+
+				return nil, fmt.Errorf("error creating index directory: %v", err)
+			}
 		}
 
 	}
@@ -133,6 +109,16 @@ func loadIndexFile(indexFilePath string, indexMap *map[uint32][]*IndexEntry) err
 	}
 
 	return nil
+}
+
+func (indexManager *IndexManager) Update(key uint32, indexId uint8, entryList []*IndexEntry) {
+
+	indexManager.lock.Lock()
+
+	defer indexManager.lock.Unlock()
+
+	indexManager.indexHandles[indexId][key] = entryList
+
 }
 
 func (indexManager *IndexManager) Save() error {
@@ -165,87 +151,4 @@ func (indexManager *IndexManager) Save() error {
 	}
 
 	return nil
-}
-
-func (indexManager *IndexManager) GetValidOffsets(entryList []*IndexEntry, from uint32, to uint32) ([]int64, error) {
-
-	if len(entryList) == 0 {
-
-		return nil, nil
-	}
-
-	start := customBinarySearch(entryList, func(timestamp uint32) bool {
-
-		return timestamp >= from
-
-	}, true)
-
-	if start == -1 {
-
-		return nil, nil
-	}
-
-	end := customBinarySearch(entryList, func(ts uint32) bool {
-
-		return ts <= to
-
-	}, false)
-
-	if end == -1 || start > end {
-
-		return nil, nil
-	}
-
-	validOffsets := make([]int64, 0, end-start+1)
-
-	for i := start; i <= end; i++ {
-
-		validOffsets = append(validOffsets, entryList[i].Offset)
-	}
-
-	return validOffsets, nil
-
-}
-
-func customBinarySearch(entries []*IndexEntry, condition func(uint32) bool, searchFirst bool) int {
-
-	low := 0
-
-	high := len(entries) - 1
-
-	result := -1
-
-	for low <= high {
-
-		mid := (low + high) / 2
-
-		timestamp := entries[mid].TimeStamp
-
-		if condition(timestamp) {
-
-			result = mid
-
-			if searchFirst {
-
-				high = mid - 1
-
-			} else {
-
-				low = mid + 1
-			}
-
-		} else {
-
-			if searchFirst {
-
-				low = mid + 1
-
-			} else {
-
-				high = mid - 1
-			}
-		}
-	}
-
-	return result
 }

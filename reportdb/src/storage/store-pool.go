@@ -159,6 +159,7 @@ func (storePool *StorePool) Shutdown() {
 	}
 
 	storePool.lock.Unlock()
+
 }
 
 func (storePool *StorePool) CheckEngineUsedPut(day string) bool {

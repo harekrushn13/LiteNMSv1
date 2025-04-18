@@ -29,7 +29,7 @@ func NewStorageEngine(baseDir string) *StoreEngine {
 	}
 }
 
-func (store *StoreEngine) Put(key uint32, timestamp uint32, data []byte) error {
+func (store *StoreEngine) Put(key uint32, data []byte) error {
 
 	store.isUsedPut = true
 
@@ -40,6 +40,13 @@ func (store *StoreEngine) Put(key uint32, timestamp uint32, data []byte) error {
 		return err
 	}
 
+	entryList, err := store.indexManager.GetIndexMapEntryList(key, fileId, store.isUsedPut)
+
+	if err != nil {
+
+		return fmt.Errorf("GetIndexMapEntryList error: %v", err)
+	}
+
 	handle, err := store.fileManager.GetHandle(fileId)
 
 	if err != nil {
@@ -47,7 +54,9 @@ func (store *StoreEngine) Put(key uint32, timestamp uint32, data []byte) error {
 		return fmt.Errorf("fileManager.GetHandle(%d): %v", fileId, err)
 	}
 
-	if err := store.fileManager.CheckCapacity(handle, int64(len(data))); err != nil {
+	entryList, err = store.fileManager.CheckCapacity(handle, entryList, int64(len(data)))
+
+	if err != nil {
 
 		return fmt.Errorf("fileManager.CheckCapacity(%d): %v", fileId, err)
 	}
@@ -56,15 +65,13 @@ func (store *StoreEngine) Put(key uint32, timestamp uint32, data []byte) error {
 
 	defer handle.lock.Unlock()
 
-	offset := handle.Offset
+	offset := entryList[len(entryList)-1].EntryEnd
 
 	copy(handle.mappedBuffer[offset:], data)
 
-	handle.Offset += int64(len(data))
+	entryList[len(entryList)-1].EntryEnd += int64(len(data))
 
-	binary.LittleEndian.PutUint64(handle.mappedBuffer[:8], uint64(handle.Offset))
-
-	store.indexManager.Update(key, offset, timestamp, fileId)
+	store.indexManager.Update(key, fileId, entryList)
 
 	return nil
 }
@@ -78,18 +85,11 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 		return nil, err
 	}
 
-	entryList, err := store.indexManager.GetIndexMapEntryList(key, fileId)
+	entryList, err := store.indexManager.GetIndexMapEntryList(key, fileId, store.isUsedPut)
 
 	if err != nil {
 
 		return nil, fmt.Errorf("store.indexManager.GetIndexMapEntryList error: %v", err)
-	}
-
-	validOffsets, err := store.indexManager.GetValidOffsets(entryList, from, to)
-
-	if err != nil {
-
-		return nil, fmt.Errorf("failed to get valid offsets: %v", err)
 	}
 
 	handle, err := store.fileManager.GetHandle(fileId)
@@ -105,24 +105,29 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 
 	var dayResult [][]byte
 
-	for _, offset := range validOffsets {
+	for _, entry := range entryList {
 
-		if offset+4 > int64(len(handle.mappedBuffer)) {
+		start := entry.EntryStart
 
-			return nil, fmt.Errorf("offset %d out of bounds for length prefix", offset)
+		end := entry.EntryEnd
+
+		for start < end {
+
+			length := binary.LittleEndian.Uint32(handle.mappedBuffer[start : start+4])
+
+			timestamp := binary.LittleEndian.Uint32(handle.mappedBuffer[start+4 : start+8])
+
+			if timestamp >= from && timestamp <= to {
+
+				dayResult = append(dayResult, handle.mappedBuffer[start+8:start+8+int64(length)])
+			}
+
+			start = start + 8 + int64(length)
 		}
-
-		length := binary.LittleEndian.Uint32(handle.mappedBuffer[offset : offset+4])
-
-		if offset+4+int64(length) > int64(len(handle.mappedBuffer)) {
-
-			return nil, fmt.Errorf("record at offset %d extends beyond file bounds", offset)
-		}
-
-		dayResult = append(dayResult, handle.mappedBuffer[offset+4:offset+4+int64(length)])
 	}
 
 	return dayResult, nil
+
 }
 
 func getPartitionId(key uint32) (uint8, error) {

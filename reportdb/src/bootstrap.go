@@ -39,6 +39,7 @@ func main() {
 			select {
 
 			case <-statTicker.C:
+
 				runtime.ReadMemStats(&stat)
 
 				log.Printf("NumGC: %v  GCCPUFraction : %v", stat.NumGC, stat.GCCPUFraction)

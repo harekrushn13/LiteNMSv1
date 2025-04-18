@@ -90,8 +90,6 @@ func (poller *PollerServer) listen(dataChannel chan []Events) {
 
 			batchData, err := poller.subscriber.RecvBytes(0)
 
-			fmt.Println("batchData:", len(batchData))
-
 			if err != nil {
 
 				log.Printf("NewPollerServer : Error receiving message: %v", err)
@@ -109,6 +107,8 @@ func (poller *PollerServer) listen(dataChannel chan []Events) {
 
 				continue
 			}
+
+			fmt.Println("batchData:", len(events))
 
 			dataChannel <- events
 		}

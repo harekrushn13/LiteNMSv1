@@ -112,7 +112,7 @@ func (writer *Writer) runWriter(workingDirectory string) {
 				continue
 			}
 
-			err = store.Put(row.ObjectId, row.Timestamp, writer.data[:lastIndex])
+			err = store.Put(row.ObjectId, writer.data[:lastIndex])
 
 			if err != nil {
 
