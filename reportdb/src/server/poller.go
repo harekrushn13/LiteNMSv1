@@ -108,7 +108,7 @@ func (poller *PollerServer) listen(dataChannel chan []Events) {
 				continue
 			}
 
-			fmt.Println("batchData:", len(events))
+			fmt.Println("batchData:", len(events), events)
 
 			dataChannel <- events
 		}

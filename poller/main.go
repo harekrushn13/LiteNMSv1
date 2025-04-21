@@ -38,9 +38,9 @@ func main() {
 
 	}()
 
-	pollChan := PollData(&waitGroup)
+	dataChannel := PollData(&waitGroup)
 
-	ZMQServer(pollChan, &waitGroup)
+	ZMQServer(dataChannel, &waitGroup)
 
 	waitGroup.Wait()
 }

@@ -131,3 +131,8 @@ func GetCounterPollingInterval(counterId uint16) int64 {
 
 	return 0
 }
+
+func GetAllCounters() map[uint16]CounterConfig {
+
+	return counterConfigs
+}

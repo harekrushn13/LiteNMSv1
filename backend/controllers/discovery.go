@@ -208,7 +208,7 @@ func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
 		}
 	}
 
-	discoveredDevices := dc.performDiscovery(targetIPs, credentials)
+	discoveredDevices := dc.runDiscovery(targetIPs, credentials)
 
 	_, err = dc.DB.Exec(`
         UPDATE discovery_profile 
@@ -233,7 +233,7 @@ func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
 
 }
 
-func (dc *DiscoveryController) performDiscovery(targetIPs []string, credentials []Credential) []map[string]interface{} {
+func (dc *DiscoveryController) runDiscovery(targetIPs []string, credentials []Credential) []map[string]interface{} {
 
 	type result struct {
 		IP string
