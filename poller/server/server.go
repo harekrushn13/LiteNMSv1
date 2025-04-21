@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/pebbe/zmq4"
 	"log"
 	. "poller/polling"
@@ -26,8 +25,6 @@ func ZMQServer(dataChannel <-chan []Events, waitGroup *sync.WaitGroup) {
 
 		publisher, err := context.NewSocket(zmq4.PUB)
 
-		defer publisher.Close()
-
 		if err != nil {
 
 			log.Fatal(err)
@@ -47,8 +44,6 @@ func ZMQServer(dataChannel <-chan []Events, waitGroup *sync.WaitGroup) {
 			}
 
 			_, err = publisher.SendBytes(jsonData, 0)
-
-			fmt.Println("hello send")
 
 			if err != nil {
 

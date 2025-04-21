@@ -9,8 +9,6 @@ import (
 type Interval string
 
 const (
-	PollingInterval Interval = "pollingInterval"
-
 	BatchInterval Interval = "batchInterval"
 )
 
@@ -26,17 +24,17 @@ const (
 	TypeString
 )
 
-type ConfigType = string
+type CounterConfig struct {
+	Name string `json:"name"`
+
+	Type string `json:"type"`
+
+	Polling int64 `json:"polling"`
+}
+
+var counterConfigs = map[uint16]CounterConfig{}
 
 var counterMapping = map[uint16]DataType{}
-
-const (
-	Objects ConfigType = "objects"
-
-	Counters ConfigType = "counters"
-)
-
-var configMapping = map[string]int{}
 
 func InitConfig() error {
 
@@ -70,18 +68,12 @@ func InitConfig() error {
 		return fmt.Errorf("read counter.json file error: %s", err)
 	}
 
-	tempCounterMapping := map[uint16]struct {
-		Name string `json:"name"`
-
-		Type string `json:"type"`
-	}{}
-
-	if err := json.Unmarshal(counterData, &tempCounterMapping); err != nil {
+	if err := json.Unmarshal(counterData, &counterConfigs); err != nil {
 
 		return fmt.Errorf("parse counter.json file error: %s", err)
 	}
 
-	for key, value := range tempCounterMapping {
+	for key, value := range counterConfigs {
 
 		switch value.Type {
 
@@ -103,30 +95,7 @@ func InitConfig() error {
 
 	}
 
-	tempCounterMapping = nil
-
-	configPath := currentPath + "/config/config.json"
-
-	configData, err := os.ReadFile(configPath)
-
-	if err != nil {
-
-		return fmt.Errorf("read config.json file error: %s", err)
-	}
-
-	if err := json.Unmarshal(configData, &configMapping); err != nil {
-
-		return fmt.Errorf("parse config.json file error: %s", err)
-	}
-
 	return nil
-}
-
-func GetPollingInterval() int64 {
-
-	value, _ := intervalMapping[PollingInterval]
-
-	return value
 }
 
 func GetBatchInterval() int64 {
@@ -143,16 +112,22 @@ func GetCounterType(counterId uint16) DataType {
 	return value
 }
 
-func GetObjects() uint32 {
+func GetCounterName(counterId uint16) string {
 
-	value, _ := configMapping[Objects]
+	if config, exists := counterConfigs[counterId]; exists {
 
-	return uint32(value)
+		return config.Name
+	}
+
+	return ""
 }
 
-func GetCounters() uint16 {
+func GetCounterPollingInterval(counterId uint16) int64 {
 
-	value, _ := configMapping[Counters]
+	if config, exists := counterConfigs[counterId]; exists {
 
-	return uint16(value)
+		return config.Polling
+	}
+
+	return 0
 }

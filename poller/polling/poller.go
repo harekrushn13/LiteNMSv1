@@ -2,7 +2,7 @@ package polling
 
 import (
 	"fmt"
-	"math/rand"
+	"golang.org/x/crypto/ssh"
 	. "poller/utils"
 	"sync"
 	"time"
@@ -17,10 +17,40 @@ type Events struct {
 
 	Value interface{}
 }
+type Device struct {
+	ObjectID uint32 `json:"object_id"`
+
+	IP string `json:"ip"`
+
+	CredentialID uint16 `json:"credential_id"`
+
+	DiscoveryID uint16 `json:"discovery_id"`
+
+	Username string `json:"username"`
+
+	Password string `json:"password"`
+
+	Port uint16 `json:"port"`
+}
+
+var (
+	devices []Device
+
+	devicesLock sync.RWMutex
+)
+
+func SetProvisionedDevices(newDevices []Device) {
+
+	devicesLock.Lock()
+
+	defer devicesLock.Unlock()
+
+	devices = newDevices
+}
 
 func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
 
-	out := make(chan []Events)
+	out := make(chan []Events, 10)
 
 	waitGroup.Add(1)
 
@@ -28,11 +58,19 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
 
 		defer waitGroup.Done()
 
-		ticker := time.NewTicker(time.Duration(GetPollingInterval()) * time.Second)
+		ticker1s := time.NewTicker(1 * time.Second)
 
-		defer ticker.Stop()
+		ticker2s := time.NewTicker(2 * time.Second)
+
+		ticker5s := time.NewTicker(3 * time.Second)
 
 		batchTicker := time.NewTicker(time.Duration(GetBatchInterval()) * time.Millisecond)
+
+		defer ticker1s.Stop()
+
+		defer ticker2s.Stop()
+
+		defer ticker5s.Stop()
 
 		defer batchTicker.Stop()
 
@@ -42,78 +80,148 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
 
 			select {
 
-			case <-ticker.C:
+			case <-ticker1s.C:
 
-				timestamp := time.Now().Unix()
+				pollCounter(1, &batch)
 
-				for objectId := uint32(1); objectId <= GetObjects(); objectId++ {
+			case <-ticker2s.C:
 
-					for counterId := uint16(1); counterId <= GetCounters(); counterId++ {
+				pollCounter(2, &batch)
 
-						var value interface{}
+			case <-ticker5s.C:
 
-						switch GetCounterType(counterId) {
-
-						case TypeUint64:
-
-							value = rand.Uint64()
-
-						case TypeFloat64:
-
-							value = rand.Float64() * 10
-
-						case TypeString:
-
-							value = generateRandomString(rand.Intn(50) + 1)
-						}
-
-						batch = append(batch, Events{
-
-							ObjectId: objectId,
-
-							CounterId: counterId,
-
-							Timestamp: uint32(timestamp),
-
-							Value: value,
-						})
-
-						if counterId == 3 && objectId == 3 {
-
-							fmt.Println("data : ", batch[len(batch)-1])
-						}
-					}
-				}
+				pollCounter(3, &batch)
 
 			case <-batchTicker.C:
 
 				if len(batch) > 0 {
 
-					fmt.Println("batch send", batch)
-
 					out <- batch
 
 					batch = nil
 				}
-
 			}
-
 		}
 	}()
 
 	return out
 }
 
-func generateRandomString(length int) string {
+func pollCounter(counterId uint16, batch *[]Events) {
 
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	devicesLock.RLock()
 
-	b := make([]byte, length)
+	defer devicesLock.RUnlock()
 
-	for i := range b {
+	timestamp := uint32(time.Now().Unix())
 
-		b[i] = charset[rand.Intn(len(charset))]
+	for _, device := range devices {
+
+		value, err := getCounterViaSSH(device, counterId)
+
+		if err != nil {
+
+			fmt.Printf("Error polling device %s (ID: %d) for counter %d: %v\n",
+				device.IP, device.ObjectID, counterId, err)
+
+			continue
+		}
+
+		*batch = append(*batch, Events{
+
+			ObjectId: device.ObjectID,
+
+			CounterId: counterId,
+
+			Timestamp: timestamp,
+
+			Value: value,
+		})
 	}
 
-	return string(b)
+}
+
+func getCounterViaSSH(device Device, counterId uint16) (interface{}, error) {
+
+	config := &ssh.ClientConfig{
+
+		User: device.Username,
+
+		Auth: []ssh.AuthMethod{
+			ssh.Password(device.Password),
+		},
+
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+
+		Timeout: 5 * time.Second,
+	}
+
+	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", device.IP, device.Port), config)
+
+	if err != nil {
+
+		return nil, err
+	}
+
+	defer client.Close()
+
+	session, err := client.NewSession()
+
+	if err != nil {
+
+		return nil, err
+	}
+
+	defer session.Close()
+
+	var cmd string
+
+	switch counterId {
+
+	case 1:
+		cmd = `free -b | awk '/Mem:/ {print $3}'`
+
+	case 2:
+		cmd = `top -bn1 | awk '/%Cpu/ {print 100 - $8}'`
+
+	case 3:
+		cmd = `hostname`
+
+	default:
+		return nil, fmt.Errorf("unknown counter ID: %d", counterId)
+	}
+
+	output, err := session.Output(cmd)
+
+	if err != nil {
+
+		return nil, err
+	}
+
+	switch GetCounterType(counterId) {
+
+	case TypeUint64:
+
+		var uintValue uint64
+
+		_, err := fmt.Sscanf(string(output), "%d", &uintValue)
+
+		return uintValue, err
+
+	case TypeFloat64:
+
+		var floatValue float64
+
+		_, err := fmt.Sscanf(string(output), "%f", &floatValue)
+
+		return floatValue, err
+
+	case TypeString:
+
+		return string(output), nil
+
+	default:
+
+		return nil, fmt.Errorf("unsupported counter type")
+	}
 }

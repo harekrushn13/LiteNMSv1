@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	. "poller/polling"
 	. "poller/server"
@@ -21,7 +22,25 @@ func main() {
 
 	var waitGroup sync.WaitGroup
 
-	ZMQServer(PollData(&waitGroup), &waitGroup)
+	deviceChan := make(chan []Device, 1)
+
+	go StartProvisionListener(deviceChan, &waitGroup)
+
+	go func() {
+
+		for devices := range deviceChan {
+
+			fmt.Println("setProvisionDevices", devices)
+
+			SetProvisionedDevices(devices)
+
+		}
+
+	}()
+
+	pollChan := PollData(&waitGroup)
+
+	ZMQServer(pollChan, &waitGroup)
 
 	waitGroup.Wait()
 }
