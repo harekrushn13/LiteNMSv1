@@ -119,7 +119,7 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 
 			if timestamp >= from && timestamp <= to {
 
-				dayResult = append(dayResult, handle.mappedBuffer[start+8:start+8+int64(length)])
+				dayResult = append(dayResult, handle.mappedBuffer[start+4:start+8+int64(length)])
 			}
 
 			start = start + 8 + int64(length)

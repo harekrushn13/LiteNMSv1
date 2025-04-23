@@ -1,24 +1,28 @@
 package utils
 
-import "time"
-
-type Query struct {
-	Timestamp time.Time `json:"timestamp"`
-
+type QueryReceive struct {
 	RequestID uint64 `json:"request_id"`
 
-	ObjectId uint32 `json:"object_id"`
+	Query Query `json:"query_request"`
+}
+
+type Query struct {
+	CounterID uint16 `json:"counter_id"`
+
+	ObjectIDs []uint32 `json:"object_ids"`
 
 	From uint32 `json:"from"`
 
 	To uint32 `json:"to"`
 
-	CounterId uint16 `json:"counter_id"`
+	Aggregation string `json:"aggregation"`
+
+	GroupByObjects bool `json:"group_by_objects"`
+
+	Interval string `json:"interval"`
 }
 
 type Response struct {
-	Timestamp time.Time `json:"timestamp"`
-
 	RequestID uint64 `json:"request_id"`
 
 	Error string `json:"error,omitempty"`

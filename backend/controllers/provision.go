@@ -2,11 +2,9 @@ package controllers
 
 import (
 	. "backend/models"
-	"bytes"
+	. "backend/utils"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -17,23 +15,16 @@ import (
 type ProvisionController struct {
 	DB *sqlx.DB
 
-	PollerAPI string
+	deviceChannel chan []PollerDevice
 }
 
-func NewProvisionController(db *sqlx.DB, pollerAPI string) *ProvisionController {
+func NewProvisionController(db *sqlx.DB, deviceChannel chan []PollerDevice) *ProvisionController {
 
 	return &ProvisionController{
-
 		DB: db,
 
-		PollerAPI: pollerAPI,
+		deviceChannel: deviceChannel,
 	}
-}
-
-type ProvisionRequest struct {
-	DiscoveryID uint16 `json:"discovery_id" binding:"required"`
-
-	Devices []ProvisionDevice `json:"devices" binding:"required,min=1"`
 }
 
 type ProvisionDevice struct {
@@ -44,7 +35,11 @@ type ProvisionDevice struct {
 
 func (pc *ProvisionController) ProvisionDevice(c *gin.Context) {
 
-	var request ProvisionRequest
+	var request struct {
+		DiscoveryID uint16 `json:"discovery_id" binding:"required"`
+
+		Devices []ProvisionDevice `json:"devices" binding:"required,min=1"`
+	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 
@@ -67,15 +62,15 @@ func (pc *ProvisionController) ProvisionDevice(c *gin.Context) {
 		return
 	}
 
-	if discoveryStatus != Success {
-
-		c.JSON(http.StatusBadRequest, gin.H{
-
-			"error": "can only provision from successful discoveries",
-		})
-
-		return
-	}
+	//if discoveryStatus != Success {
+	//
+	//	c.JSON(http.StatusBadRequest, gin.H{
+	//
+	//		"error": "can only provision from successful discoveries",
+	//	})
+	//
+	//	return
+	//}
 
 	var count int
 
@@ -92,8 +87,6 @@ func (pc *ProvisionController) ProvisionDevice(c *gin.Context) {
 		return
 	}
 
-	//fmt.Println(count, len(getCredentialIDs(request.Devices)))
-	//
 	//if count != len(getCredentialIDs(request.Devices)) {
 	//
 	//	c.JSON(http.StatusBadRequest, gin.H{"error": "one or more credential_ids not found"})
@@ -196,6 +189,8 @@ func (pc *ProvisionController) ProvisionDevice(c *gin.Context) {
 
 			log.Printf("Failed to notify poller service: %v", err)
 
+			return
+
 		}
 
 	}()
@@ -224,61 +219,39 @@ func getCredentialIDs(devices []ProvisionDevice) []uint16 {
 
 func (pc *ProvisionController) sendToPoller(provisionedDevices []Provision) error {
 
-	type PollerDevice struct {
-		ObjectID     uint32 `json:"object_id"`
-		IP           string `json:"ip"`
-		CredentialID uint16 `json:"credential_id"`
-		DiscoveryID  uint16 `json:"discovery_id"`
-		Username     string `json:"username"`
-		Password     string `json:"password"`
-		Port         uint16 `json:"port"`
-	}
-
 	var pollerDevices []PollerDevice
 
-	for _, d := range provisionedDevices {
+	for _, device := range provisionedDevices {
 
 		var cred Credential
 
 		err := pc.DB.Get(&cred, `
             SELECT username, password, port 
             FROM credential_profile 
-            WHERE credential_id = $1`, d.CredentialID)
+            WHERE credential_id = $1`, device.CredentialID)
 
 		if err != nil {
+
 			continue
 		}
 
 		pollerDevices = append(pollerDevices, PollerDevice{
-			ObjectID:     d.ObjectID,
-			IP:           d.IP,
-			CredentialID: d.CredentialID,
-			DiscoveryID:  d.DiscoveryID,
-			Username:     cred.Username,
-			Password:     cred.Password,
-			Port:         cred.Port,
+			ObjectID: device.ObjectID,
+
+			IP: device.IP,
+
+			CredentialID: device.CredentialID,
+
+			DiscoveryID: device.DiscoveryID,
+
+			Username: cred.Username,
+
+			Password: cred.Password,
+
+			Port: cred.Port,
 		})
-	}
 
-	jsonData, err := json.Marshal(pollerDevices)
-
-	if err != nil {
-
-		return err
-	}
-
-	resp, err := http.Post(pc.PollerAPI+"/lnms/provision", "application/json", bytes.NewBuffer(jsonData))
-
-	if err != nil {
-
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-
-		return fmt.Errorf("poller service returned status: %d", resp.StatusCode)
+		pc.deviceChannel <- pollerDevices
 	}
 
 	return nil

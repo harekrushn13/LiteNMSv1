@@ -22,7 +22,7 @@ func NewDiscoveryController(db *sqlx.DB) *DiscoveryController {
 	return &DiscoveryController{DB: db}
 }
 
-func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
+func (controller *DiscoveryController) CreateDiscovery(context *gin.Context) {
 
 	var request struct {
 		CredentialIDs []uint16 `json:"credential_ids" binding:"required,min=1"`
@@ -32,23 +32,23 @@ func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
 		IPRange string `json:"ip_range"`
 	}
 
-	if err := c.ShouldBindJSON(&request); err != nil {
+	if err := context.ShouldBindJSON(&request); err != nil {
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 		return
 	}
 
 	if request.IP == "" && request.IPRange == "" {
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": "either ip or ip_range must be provided"})
+		context.JSON(http.StatusBadRequest, gin.H{"error": "either ip or ip_range must be provided"})
 
 		return
 	}
 
 	if request.IP != "" && request.IPRange != "" {
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": "provide either ip or ip_range, not both"})
+		context.JSON(http.StatusBadRequest, gin.H{"error": "provide either ip or ip_range, not both"})
 
 		return
 	}
@@ -57,7 +57,7 @@ func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
 
 		if net.ParseIP(request.IP) == nil {
 
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ip format"})
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid ip format"})
 
 			return
 		}
@@ -69,7 +69,7 @@ func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
 
 		if err != nil {
 
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ip_range format"})
+			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid ip_range format"})
 
 			return
 		}
@@ -79,18 +79,18 @@ func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
 
 	query := "SELECT COUNT(*) FROM credential_profile WHERE credential_id = ANY($1)"
 
-	err := dc.DB.Get(&count, query, pq.Array(request.CredentialIDs))
+	err := controller.DB.Get(&count, query, pq.Array(request.CredentialIDs))
 
 	if err != nil {
 
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify credentials"})
+		context.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify credentials"})
 
 		return
 	}
 
 	if count != len(request.CredentialIDs) {
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": "one or more credential_ids not found"})
+		context.JSON(http.StatusBadRequest, gin.H{"error": "one or more credential_ids not found"})
 
 		return
 	}
@@ -113,7 +113,7 @@ func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
 
 	var discoveryID uint16
 
-	err = dc.DB.QueryRow(
+	err = controller.DB.QueryRow(
 
 		query,
 
@@ -128,12 +128,12 @@ func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
 
 	if err != nil {
 
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	context.JSON(http.StatusCreated, gin.H{
 
 		"discovery_id": discoveryID,
 
@@ -142,13 +142,13 @@ func (dc *DiscoveryController) CreateDiscovery(c *gin.Context) {
 
 }
 
-func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
+func (controller *DiscoveryController) StartDiscovery(c *gin.Context) {
 
 	discoveryID := c.Param("id")
 
 	var discovery Discovery
 
-	err := dc.DB.Get(&discovery, `
+	err := controller.DB.Get(&discovery, `
         SELECT discovery_id, credential_id, ip, ip_range, discovery_status 
         FROM discovery_profile 
         WHERE discovery_id = $1`, discoveryID)
@@ -169,7 +169,7 @@ func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
 
 	var credentials []Credential
 
-	err = dc.DB.Select(&credentials, `
+	err = controller.DB.Select(&credentials, `
         SELECT credential_id, username, password, port 
         FROM credential_profile 
         WHERE credential_id = ANY($1)`, pq.Array(discovery.CredentialIDs))
@@ -181,11 +181,11 @@ func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
 		return
 	}
 
-	var targetIPs []string
+	var allIPs []string
 
 	if discovery.IP != "" {
 
-		targetIPs = []string{discovery.IP}
+		allIPs = []string{discovery.IP}
 
 	} else {
 
@@ -198,7 +198,7 @@ func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
 			return
 		}
 
-		targetIPs, err = generateIPList(ipNet)
+		allIPs, err = getAllIps(ipNet)
 
 		if err != nil {
 
@@ -208,9 +208,9 @@ func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
 		}
 	}
 
-	discoveredDevices := dc.runDiscovery(targetIPs, credentials)
+	discoveredDevices := controller.runDiscovery(allIPs, credentials)
 
-	_, err = dc.DB.Exec(`
+	_, err = controller.DB.Exec(`
         UPDATE discovery_profile 
         SET discovery_status = $1, updated_at = NOW() 
         WHERE discovery_id = $2`, Success, discoveryID)
@@ -233,7 +233,7 @@ func (dc *DiscoveryController) StartDiscovery(c *gin.Context) {
 
 }
 
-func (dc *DiscoveryController) runDiscovery(targetIPs []string, credentials []Credential) []map[string]interface{} {
+func (controller *DiscoveryController) runDiscovery(allIPs []string, credentials []Credential) []map[string]interface{} {
 
 	type result struct {
 		IP string
@@ -245,7 +245,7 @@ func (dc *DiscoveryController) runDiscovery(targetIPs []string, credentials []Cr
 		Error string
 	}
 
-	results := make(chan result, len(targetIPs)*len(credentials))
+	results := make(chan result, len(allIPs)*len(credentials))
 
 	var discoveredDevices []map[string]interface{}
 
@@ -267,7 +267,7 @@ func (dc *DiscoveryController) runDiscovery(targetIPs []string, credentials []Cr
 			Timeout: 5 * time.Second,
 		}
 
-		for _, ip := range targetIPs {
+		for _, ip := range allIPs {
 
 			wg.Add(1)
 
@@ -320,8 +320,6 @@ func (dc *DiscoveryController) runDiscovery(targetIPs []string, credentials []Cr
 					Success: true,
 				}
 
-				fmt.Println(ip, cred.CredentialID)
-
 			}(ip, cred)
 		}
 	}
@@ -332,7 +330,7 @@ func (dc *DiscoveryController) runDiscovery(targetIPs []string, credentials []Cr
 
 	deviceMap := make(map[string]bool)
 
-	for i := 0; i < len(targetIPs)*len(credentials); i++ {
+	for i := 0; i < len(allIPs)*len(credentials); i++ {
 
 		res := <-results
 
@@ -352,34 +350,32 @@ func (dc *DiscoveryController) runDiscovery(targetIPs []string, credentials []Cr
 	return discoveredDevices
 }
 
-func generateIPList(ipNet *net.IPNet) ([]string, error) {
+func getAllIps(ipNet *net.IPNet) ([]string, error) {
 
 	var ips []string
 
-	mask := ipNet.Mask
+	ip := ipNet.IP
 
-	network := ipNet.IP.Mask(mask)
+	for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); increment(ip) {
 
-	ip := make(net.IP, len(network))
-
-	copy(ip, network)
-
-	inc(ip)
-
-	for ipNet.Contains(ip) {
-
-		if !isBroadcast(ip, ipNet) {
-
-			ips = append(ips, ip.String())
-		}
-
-		inc(ip)
+		ips = append(ips, ip.String())
 	}
 
-	return ips, nil
+	lenIPs := len(ips)
+
+	switch {
+
+	case lenIPs < 2:
+
+		return ips, nil
+
+	default:
+
+		return ips[1 : len(ips)-1], nil
+	}
 }
 
-func inc(ip net.IP) {
+func increment(ip net.IP) {
 
 	for j := len(ip) - 1; j >= 0; j-- {
 
@@ -390,16 +386,4 @@ func inc(ip net.IP) {
 			break
 		}
 	}
-}
-
-func isBroadcast(ip net.IP, ipNet *net.IPNet) bool {
-
-	broadcast := make(net.IP, len(ipNet.IP))
-
-	for i := range ipNet.IP {
-
-		broadcast[i] = ipNet.IP[i] | ^ipNet.Mask[i]
-	}
-
-	return ip.Equal(broadcast)
 }

@@ -116,9 +116,7 @@ func createTaskQueue() {
 	}
 }
 
-func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
-
-	dataChannel := make(chan []Events, 10)
+func PollData(dataChannel chan []Events, waitGroup *sync.WaitGroup) {
 
 	waitGroup.Add(1)
 
@@ -150,5 +148,4 @@ func PollData(waitGroup *sync.WaitGroup) <-chan []Events {
 		}
 	}()
 
-	return dataChannel
 }

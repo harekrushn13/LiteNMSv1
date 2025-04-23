@@ -77,9 +77,9 @@ func main() {
 
 	dataChannel := make(chan []Events, eventsBuffer) // buffer to receive []Events
 
-	// pollerServer to receive data from poller
+	// pollingServer to receive data from poller
 
-	pollerServer, err := NewPollerServer(dataChannel)
+	pollingServer, err := NewPollingServer(dataChannel)
 
 	if err != nil {
 
@@ -124,7 +124,7 @@ func main() {
 
 	// Initialise queryChannel with buffer
 
-	queryChannel := make(chan Query, 10)
+	queryChannel := make(chan QueryReceive, 10)
 
 	// Initialise queryServer to receive query from clients
 
@@ -158,7 +158,7 @@ func main() {
 
 	fmt.Println("\nstart shutting down : ", time.Now())
 
-	pollerServer.Shutdown()
+	pollingServer.Shutdown()
 
 	queryServer.Shutdown()
 

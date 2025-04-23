@@ -1,11 +1,11 @@
 package server
 
 import (
+	. "backend/utils"
 	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
 	"log"
-	. "poller/polling"
 )
 
 type PollingServer struct {
@@ -20,7 +20,7 @@ type PollingServer struct {
 	shutdownPush chan bool
 }
 
-func NewPollingServer(deviceChannel chan []Device, dataChannel chan []Events) (*PollingServer, error) {
+func NewPollingServer(deviceChannel chan []PollerDevice, dataChannel chan []byte) (*PollingServer, error) {
 
 	context, err := zmq4.NewContext()
 
@@ -38,7 +38,7 @@ func NewPollingServer(deviceChannel chan []Device, dataChannel chan []Events) (*
 		return nil, fmt.Errorf("failed to create PULL socket: %v", err)
 	}
 
-	if err := pullSocket.Bind("tcp://*:6002"); err != nil {
+	if err := pullSocket.Connect("tcp://localhost:6001"); err != nil {
 
 		pullSocket.Close()
 
@@ -55,10 +55,10 @@ func NewPollingServer(deviceChannel chan []Device, dataChannel chan []Events) (*
 
 		context.Term()
 
-		return nil, fmt.Errorf("failed to create PUB socket: %v", err)
+		return nil, fmt.Errorf("failed to create PUSH socket: %v", err)
 	}
 
-	if err := pushSocket.Bind("tcp://*:6001"); err != nil {
+	if err := pushSocket.Connect("tcp://localhost:6002"); err != nil {
 
 		pushSocket.Close()
 
@@ -66,7 +66,7 @@ func NewPollingServer(deviceChannel chan []Device, dataChannel chan []Events) (*
 
 		context.Term()
 
-		return nil, fmt.Errorf("failed to bind PUB socket: %v", err)
+		return nil, fmt.Errorf("failed to bind PUSH socket: %v", err)
 	}
 
 	server := &PollingServer{
@@ -82,14 +82,14 @@ func NewPollingServer(deviceChannel chan []Device, dataChannel chan []Events) (*
 		shutdownPush: make(chan bool, 1),
 	}
 
-	go server.pollingReceiver(deviceChannel)
+	go server.pollingReceiver(dataChannel)
 
-	go server.pollingSender(dataChannel)
+	go server.pollingSender(deviceChannel)
 
 	return server, nil
 }
 
-func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
+func (server *PollingServer) pollingReceiver(dataChannel chan []byte) {
 
 	for {
 
@@ -99,13 +99,15 @@ func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
 
 			server.pullSocket.Close()
 
+			close(dataChannel)
+
 			server.shutdownPull <- true
 
 			return
 
 		default:
 
-			msg, err := server.pullSocket.RecvBytes(0)
+			data, err := server.pullSocket.RecvBytes(0)
 
 			if err != nil {
 
@@ -114,36 +116,30 @@ func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
 				continue
 			}
 
-			var devices []Device
-
-			if err := json.Unmarshal(msg, &devices); err != nil {
-
-				log.Printf("pollingReceiver : Error unmarshaling query: %v", err)
-
-				continue
-			}
-
-			deviceChannel <- devices
+			dataChannel <- data
 		}
 	}
 }
 
-func (server *PollingServer) pollingSender(dataChannel chan []Events) {
+func (server *PollingServer) pollingSender(deviceChannel chan []PollerDevice) {
 
 	for {
+
 		select {
 
 		case <-server.shutdownPush:
 
 			server.pushSocket.Close()
 
+			close(deviceChannel)
+
 			server.shutdownPush <- true
 
 			return
 
-		case events := <-dataChannel:
+		case pollerDevices := <-deviceChannel:
 
-			jsonData, err := json.Marshal(events)
+			jsonData, err := json.Marshal(pollerDevices)
 
 			if err != nil {
 
@@ -161,4 +157,17 @@ func (server *PollingServer) pollingSender(dataChannel chan []Events) {
 
 		}
 	}
+}
+
+func (server *PollingServer) Shutdown() {
+
+	server.shutdownPull <- true
+
+	server.shutdownPush <- true
+
+	server.context.Term()
+
+	<-server.shutdownPull
+
+	<-server.shutdownPush
 }

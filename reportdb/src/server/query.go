@@ -11,16 +11,16 @@ import (
 type QueryServer struct {
 	pullSocket *zmq4.Socket
 
-	pubSocket *zmq4.Socket
+	pushSocket *zmq4.Socket
 
 	context *zmq4.Context
 
 	shutdownPull chan bool
 
-	shutdownPub chan bool
+	shutdownPush chan bool
 }
 
-func NewQueryServer(queryChannel chan Query, resultChannel chan Response) (*QueryServer, error) {
+func NewQueryServer(queryChannel chan QueryReceive, resultChannel chan Response) (*QueryServer, error) {
 
 	context, err := zmq4.NewContext()
 
@@ -38,7 +38,7 @@ func NewQueryServer(queryChannel chan Query, resultChannel chan Response) (*Quer
 		return nil, fmt.Errorf("failed to create PULL socket: %v", err)
 	}
 
-	if err := pullSocket.Bind("tcp://*:6001"); err != nil {
+	if err := pullSocket.Bind("tcp://*:6004"); err != nil {
 
 		pullSocket.Close()
 
@@ -47,7 +47,7 @@ func NewQueryServer(queryChannel chan Query, resultChannel chan Response) (*Quer
 		return nil, fmt.Errorf("failed to bind PULL socket: %v", err)
 	}
 
-	pubSocket, err := context.NewSocket(zmq4.PUB)
+	pushSocket, err := context.NewSocket(zmq4.PUSH)
 
 	if err != nil {
 
@@ -55,41 +55,41 @@ func NewQueryServer(queryChannel chan Query, resultChannel chan Response) (*Quer
 
 		context.Term()
 
-		return nil, fmt.Errorf("failed to create PUB socket: %v", err)
+		return nil, fmt.Errorf("failed to create PUSH socket: %v", err)
 	}
 
-	if err := pubSocket.Bind("tcp://*:6002"); err != nil {
+	if err := pushSocket.Bind("tcp://*:6005"); err != nil {
 
-		pubSocket.Close()
+		pushSocket.Close()
 
 		pullSocket.Close()
 
 		context.Term()
 
-		return nil, fmt.Errorf("failed to bind PUB socket: %v", err)
+		return nil, fmt.Errorf("failed to bind PUSH socket: %v", err)
 	}
 
 	server := &QueryServer{
 
 		pullSocket: pullSocket,
 
-		pubSocket: pubSocket,
+		pushSocket: pushSocket,
 
 		context: context,
 
 		shutdownPull: make(chan bool, 1),
 
-		shutdownPub: make(chan bool, 1),
+		shutdownPush: make(chan bool, 1),
 	}
 
-	go server.queryHandler(queryChannel)
+	go server.queryReceiver(queryChannel)
 
-	go server.responseHandler(resultChannel)
+	go server.responseSender(resultChannel)
 
 	return server, nil
 }
 
-func (queryServer *QueryServer) queryHandler(queryChannel chan Query) {
+func (queryServer *QueryServer) queryReceiver(queryChannel chan QueryReceive) {
 
 	for {
 
@@ -111,16 +111,16 @@ func (queryServer *QueryServer) queryHandler(queryChannel chan Query) {
 
 			if err != nil {
 
-				log.Printf("QueryServer : Error receiving query: %v", err)
+				log.Printf("queryReceiver : Error receiving query: %v", err)
 
 				continue
 			}
 
-			var query Query
+			var query QueryReceive
 
 			if err := json.Unmarshal(msg, &query); err != nil {
 
-				log.Printf("QueryServer : Error unmarshaling query: %v", err)
+				log.Printf("queryReceiver : Error unmarshaling query: %v", err)
 
 				return
 			}
@@ -130,19 +130,19 @@ func (queryServer *QueryServer) queryHandler(queryChannel chan Query) {
 	}
 }
 
-func (queryServer *QueryServer) responseHandler(resultChannel chan Response) {
+func (queryServer *QueryServer) responseSender(resultChannel chan Response) {
 
 	for {
 
 		select {
 
-		case <-queryServer.shutdownPub:
+		case <-queryServer.shutdownPush:
 
-			queryServer.pubSocket.Close()
+			queryServer.pushSocket.Close()
 
 			close(resultChannel)
 
-			queryServer.shutdownPub <- true
+			queryServer.shutdownPush <- true
 
 			return
 
@@ -152,21 +152,21 @@ func (queryServer *QueryServer) responseHandler(resultChannel chan Response) {
 
 			if err != nil {
 
-				log.Printf("QueryServer : Error marshaling response: %v", err)
+				log.Printf("responseSender : Error marshaling response: %v", err)
 
 				return
 			}
 
-			if _, err := queryServer.pubSocket.SendBytes(responseBytes, 0); err != nil {
+			if _, err := queryServer.pushSocket.SendBytes(responseBytes, 0); err != nil {
 
-				log.Printf("QueryServer : Error sending response: %v", err)
+				log.Printf("responseSender : Error sending response: %v", err)
 
 				return
 			}
 
 			if response.Error == "" {
 
-				fmt.Println("response :", len(response.Data.([]interface{})))
+				fmt.Println("response :", response)
 			}
 		}
 	}
@@ -176,11 +176,11 @@ func (queryServer *QueryServer) Shutdown() {
 
 	queryServer.shutdownPull <- true
 
-	queryServer.shutdownPub <- true
+	queryServer.shutdownPush <- true
 
 	queryServer.context.Term()
 
 	<-queryServer.shutdownPull
 
-	<-queryServer.shutdownPub
+	<-queryServer.shutdownPush
 }

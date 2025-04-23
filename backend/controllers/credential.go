@@ -16,7 +16,7 @@ func NewCredentialController(db *sqlx.DB) *CredentialController {
 	return &CredentialController{DB: db}
 }
 
-func (cc *CredentialController) CreateCredential(context *gin.Context) {
+func (controller *CredentialController) CreateCredential(context *gin.Context) {
 
 	var credential Credential
 
@@ -31,7 +31,7 @@ func (cc *CredentialController) CreateCredential(context *gin.Context) {
 
 	var credentialID uint16
 
-	err := cc.DB.QueryRow(query, credential.Username, credential.Password, credential.Port).Scan(&credentialID)
+	err := controller.DB.QueryRow(query, credential.Username, credential.Password, credential.Port).Scan(&credentialID)
 
 	if err != nil {
 

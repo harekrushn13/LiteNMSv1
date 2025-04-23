@@ -2,11 +2,12 @@ package routes
 
 import (
 	. "backend/controllers"
+	. "backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 )
 
-func SetupRoutes(db *sqlx.DB) *gin.Engine {
+func InitRoutes(db *sqlx.DB, deviceChannel chan []PollerDevice, queryChannel chan QueryMap) *gin.Engine {
 
 	router := gin.Default()
 
@@ -14,9 +15,9 @@ func SetupRoutes(db *sqlx.DB) *gin.Engine {
 
 	discoveryCtrl := NewDiscoveryController(db)
 
-	pollerAPI := "http://localhost:8081"
+	provisionCtrl := NewProvisionController(db, deviceChannel)
 
-	provisionCtrl := NewProvisionController(db, pollerAPI)
+	queryCtrl := NewQueryController(db, queryChannel)
 
 	v1 := router.Group("/lnms")
 
@@ -40,6 +41,12 @@ func SetupRoutes(db *sqlx.DB) *gin.Engine {
 
 		{
 			provisions.POST("/", provisionCtrl.ProvisionDevice)
+		}
+
+		query := v1.Group("/query")
+
+		{
+			query.POST("/", queryCtrl.FetchQuery)
 		}
 
 	}

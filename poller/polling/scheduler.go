@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	"golang.org/x/crypto/ssh"
+	"log"
 	. "poller/utils"
 	"time"
 )
@@ -103,7 +104,7 @@ func pollCounter(counterID uint16, batch *[]Events) {
 
 		if err != nil {
 
-			fmt.Printf("Error polling device %s (ID: %d) for counter %d: %v\n",
+			log.Printf("Error polling device %s (ID: %d) for counter %d: %v\n",
 				device.IP, device.ObjectID, counterID, err)
 
 			continue

@@ -6,7 +6,7 @@ import (
 	. "reportdb/utils"
 )
 
-func decodeData(data [][]byte, dataType DataType, result *[]interface{}) {
+func decodeData(data [][]byte, dataType DataType, result *[]DataPoint) {
 
 	for _, row := range data {
 
@@ -14,15 +14,30 @@ func decodeData(data [][]byte, dataType DataType, result *[]interface{}) {
 
 		case TypeUint64:
 
-			*result = append(*result, binary.LittleEndian.Uint64(row))
+			*result = append(*result, DataPoint{
+
+				Timestamp: binary.LittleEndian.Uint32(row[:4]),
+
+				Value: binary.LittleEndian.Uint64(row[4:]),
+			})
 
 		case TypeFloat64:
 
-			*result = append(*result, math.Float64frombits(binary.LittleEndian.Uint64(row)))
+			*result = append(*result, DataPoint{
+
+				Timestamp: binary.LittleEndian.Uint32(row[:4]),
+
+				Value: math.Float64frombits(binary.LittleEndian.Uint64(row[4:])),
+			})
 
 		case TypeString:
 
-			*result = append(*result, string(row))
+			*result = append(*result, DataPoint{
+
+				Timestamp: binary.LittleEndian.Uint32(row[:4]),
+
+				Value: string(row[4:]),
+			})
 
 		}
 	}

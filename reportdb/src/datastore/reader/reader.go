@@ -15,7 +15,7 @@ type Reader struct {
 
 	dayPool chan struct{} // to read multiple day in parallel for query
 
-	queryEvents chan Query // channel to take query from query distributor
+	queryEvents chan QueryReceive // channel to take query from query distributor
 
 	resultChannel chan Response // channel to send query result
 
@@ -23,11 +23,17 @@ type Reader struct {
 
 	waitGroup *sync.WaitGroup // to wait completion of all reader
 
-	dayResultMapping map[string]map[uint32][][]byte // keep day-result mapping for caching counter_id-object_id
+	dayResultMapping map[string]map[uint32][]DataPoint // keep day-result mapping for caching counter_id-object_id
 
-	results []interface{} // final result of query
+	results map[uint32][]DataPoint // final result of query
 
 	lock *sync.Mutex
+}
+
+type DataPoint struct {
+	Timestamp uint32 `json:"timestamp"`
+
+	Value interface{} `json:"value"`
 }
 
 func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
@@ -80,7 +86,7 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			dayPool: make(chan struct{}, dayWorkers),
 
-			queryEvents: make(chan Query, queryBuffer),
+			queryEvents: make(chan QueryReceive, queryBuffer),
 
 			resultChannel: resultChannel,
 
@@ -88,9 +94,9 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			waitGroup: &sync.WaitGroup{},
 
-			dayResultMapping: make(map[string]map[uint32][][]byte),
+			dayResultMapping: make(map[string]map[uint32][]DataPoint),
 
-			results: make([]interface{}, 0, 10000),
+			results: make(map[uint32][]DataPoint),
 
 			lock: &sync.Mutex{},
 		}
@@ -114,7 +120,16 @@ func (reader *Reader) runReader() {
 
 		for query := range reader.queryEvents {
 
-			results, err := reader.FetchData(query)
+			results, err := reader.FetchData(query.Query)
+
+			if err != nil {
+
+				log.Printf("Error fetching data from reader: %v", err)
+
+				continue
+			}
+
+			parseResult, err := ParseResult(results, query.Query)
 
 			var response Response
 
@@ -125,8 +140,6 @@ func (reader *Reader) runReader() {
 					RequestID: query.RequestID,
 
 					Error: err.Error(),
-
-					Timestamp: time.Now(),
 				}
 
 			} else {
@@ -135,9 +148,7 @@ func (reader *Reader) runReader() {
 
 					RequestID: query.RequestID,
 
-					Data: results,
-
-					Timestamp: time.Now(),
+					Data: parseResult,
 				}
 			}
 
@@ -158,9 +169,9 @@ func ShutdownReaders(readers []*Reader) {
 
 }
 
-func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
+func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
-	dataType, err := GetCounterType(query.CounterId)
+	dataType, err := GetCounterType(query.CounterID)
 
 	if err != nil {
 
@@ -182,83 +193,101 @@ func (reader *Reader) FetchData(query Query) ([]interface{}, error) {
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
-		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
 
-		if _, exists := reader.dayResultMapping[path][query.ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
+		for _, ObjectId := range query.ObjectIDs {
 
-			continue
+			if _, exists := reader.dayResultMapping[path][ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
+
+				continue
+			}
+
+			<-reader.dayPool
+
+			wg.Add(1)
+
+			go func(path string) {
+
+				defer func() {
+
+					wg.Done()
+
+					reader.dayPool <- struct{}{}
+				}()
+
+				store, err := reader.storePool.GetEngine(path, false)
+
+				if err != nil {
+
+					log.Printf("reader.fetchData error : %v", err)
+
+					return
+				}
+
+				dayResult, err := store.Get(ObjectId, query.From, query.To)
+
+				if err != nil {
+
+					log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
+
+					return
+
+				}
+
+				var decodeDayResult []DataPoint
+
+				decodeData(dayResult, dataType, &decodeDayResult)
+
+				reader.lock.Lock()
+
+				objectsMap, exists := reader.dayResultMapping[path]
+
+				if !exists {
+
+					objectsMap = make(map[uint32][]DataPoint)
+
+					reader.dayResultMapping[path] = objectsMap
+				}
+
+				reader.dayResultMapping[path][ObjectId] = decodeDayResult
+
+				reader.lock.Unlock()
+
+				return
+
+			}(path)
+
 		}
 
-		<-reader.dayPool
-
-		wg.Add(1)
-
-		go func(path string) {
-
-			defer func() {
-
-				wg.Done()
-
-				reader.dayPool <- struct{}{}
-			}()
-
-			store, err := reader.storePool.GetEngine(path, false)
-
-			if err != nil {
-
-				log.Printf("reader.fetchData error : %v", err)
-
-				return
-			}
-
-			dayResult, err := store.Get(query.ObjectId, query.From, query.To)
-
-			if err != nil {
-
-				log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
-
-				return
-
-			}
-
-			reader.lock.Lock()
-
-			objectsMap, exists := reader.dayResultMapping[path]
-
-			if !exists {
-
-				objectsMap = make(map[uint32][][]byte)
-
-				reader.dayResultMapping[path] = objectsMap
-			}
-
-			reader.dayResultMapping[path][query.ObjectId] = dayResult
-
-			reader.lock.Unlock()
-
-			return
-
-		}(path)
 	}
 
 	wg.Wait()
 
 	reader.lock.Lock()
 
-	reader.results = reader.results[:0]
+	//reader.results = reader.results[:0]
+	reader.results = make(map[uint32][]DataPoint)
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
-		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterId))
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
 
-		if data, exists := reader.dayResultMapping[path][query.ObjectId]; exists {
+		for _, ObjectId := range query.ObjectIDs {
 
-			decodeData(data, dataType, &reader.results)
+			if data, exists := reader.dayResultMapping[path][ObjectId]; exists {
 
-			if !current.After(fromTime) || !current.Before(toTime) {
+				if len(data) > 0 {
 
-				delete(reader.dayResultMapping[path], query.ObjectId)
+					//reader.results = append(reader.results, data)
 
+					reader.results[ObjectId] = data
+				}
+
+				if !current.After(fromTime) || !current.Before(toTime) {
+
+					delete(reader.dayResultMapping[path], ObjectId)
+
+				}
 			}
 		}
 	}
