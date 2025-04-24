@@ -5,7 +5,6 @@ import (
 	"math"
 	. "reportdb/utils"
 	"sort"
-	"strconv"
 )
 
 func ParseResult(results map[uint32][]DataPoint, query Query) (interface{}, error) {
@@ -27,32 +26,39 @@ func ParseResult(results map[uint32][]DataPoint, query Query) (interface{}, erro
 		return results, nil
 	}
 
-	var parsedResult interface{}
+	if query.Interval == 0 {
 
-	if query.Interval != "" {
-
-		intervalSec, err := strconv.ParseUint(query.Interval, 10, 32)
-
-		if err != nil {
-
-			return nil, fmt.Errorf("invalid interval: %v", err)
-		}
-
-		results = bucketData(results, uint32(intervalSec), query.From, query.To)
-
-	} else {
-
-		return processGauge(results, query.Aggregation)
+		return GaugeQuery(results, query)
 	}
 
-	if query.GroupByObjects == true {
+	return HistogramQuery(results, query)
+}
 
-		return results, nil
+func GaugeQuery(data map[uint32][]DataPoint, query Query) (interface{}, error) {
+
+	values := make([]interface{}, 0)
+
+	for _, points := range data {
+
+		values = append(values, getValues(points)...)
+
 	}
 
-	parsedResult = mergeAllObjects(results)
+	return aggregateValues(values, query.Aggregation), nil
+}
 
-	return parsedResult, nil
+func HistogramQuery(results map[uint32][]DataPoint, query Query) (interface{}, error) {
+
+	interval := uint32(query.Interval)
+
+	bucketed := bucketData(results, interval, query.From, query.To)
+
+	if query.GroupByObjects {
+
+		return bucketed, nil
+	}
+
+	return mergeAllObjects(bucketed), nil
 }
 
 func bucketData(data map[uint32][]DataPoint, interval uint32, from uint32, to uint32) map[uint32][]DataPoint {
@@ -122,57 +128,6 @@ func createBuckets(points []DataPoint, interval uint32, from uint32, to uint32) 
 	return bucketed
 }
 
-func aggregateValues(values []interface{}, aggType string) interface{} {
-
-	if len(values) == 0 {
-
-		return nil
-	}
-
-	switch aggType {
-
-	case "AVG":
-
-		return calculateAverage(values)
-
-	case "MIN":
-
-		return calculateMin(values)
-
-	case "MAX":
-
-		return calculateMax(values)
-
-	case "COUNT":
-
-		return len(values)
-
-	case "SUM":
-
-		return calculateSum(values)
-	}
-
-	if len(values) == 1 {
-
-		return values[0]
-	}
-
-	return values
-}
-
-func processGauge(data map[uint32][]DataPoint, aggregation string) (interface{}, error) {
-
-	values := make([]interface{}, 0)
-
-	for _, points := range data {
-
-		values = append(values, extractValues(points)...)
-
-	}
-
-	return aggregateValues(values, aggregation), nil
-}
-
 func mergeAllObjects(data map[uint32][]DataPoint) []DataPoint {
 
 	var allPoints []DataPoint
@@ -227,7 +182,7 @@ func mergeAllObjects(data map[uint32][]DataPoint) []DataPoint {
 	return merged
 }
 
-func extractValues(points []DataPoint) []interface{} {
+func getValues(points []DataPoint) []interface{} {
 
 	var values []interface{}
 
@@ -248,7 +203,41 @@ func extractValues(points []DataPoint) []interface{} {
 	return values
 }
 
-func calculateAverage(values []interface{}) float64 {
+func aggregateValues(values []interface{}, aggType string) interface{} {
+
+	if len(values) == 0 {
+
+		return nil
+	}
+
+	switch aggType {
+
+	case "AVG":
+
+		return getAverage(values)
+
+	case "MIN":
+
+		return getMin(values)
+
+	case "MAX":
+
+		return getMax(values)
+
+	case "SUM":
+
+		return getSum(values)
+	}
+
+	if len(values) == 1 {
+
+		return values[0]
+	}
+
+	return values
+}
+
+func getAverage(values []interface{}) float64 {
 
 	sum := 0.0
 
@@ -272,45 +261,47 @@ func calculateAverage(values []interface{}) float64 {
 	return sum / float64(count)
 }
 
-func calculateMin(values []interface{}) float64 {
+func getMin(values []interface{}) float64 {
 
-	min := math.MaxFloat64
+	minVal := math.MaxFloat64
 
 	for _, v := range values {
 
-		if f, ok := convertToFloat64(v); ok && f < min {
+		if f, ok := convertToFloat64(v); ok && f < minVal {
 
-			min = f
+			minVal = f
 		}
 	}
 
-	if min == math.MaxFloat64 {
+	if minVal == math.MaxFloat64 {
 
 		return 0
 	}
 
-	return min
+	return minVal
 }
 
-func calculateMax(values []interface{}) float64 {
-	max := -math.MaxFloat64
+func getMax(values []interface{}) float64 {
+
+	maxVal := -math.MaxFloat64
 
 	for _, v := range values {
 
-		if f, ok := convertToFloat64(v); ok && f > max {
+		if f, ok := convertToFloat64(v); ok && f > maxVal {
 
-			max = f
+			maxVal = f
 		}
 	}
 
-	if max == -math.MaxFloat64 {
+	if maxVal == -math.MaxFloat64 {
 
 		return 0
 	}
-	return max
+	return maxVal
 }
 
-func calculateSum(values []interface{}) float64 {
+func getSum(values []interface{}) float64 {
+
 	sum := 0.0
 
 	for _, v := range values {
@@ -338,6 +329,7 @@ func convertToFloat64(v interface{}) (float64, bool) {
 		return float64(n), true
 
 	default:
+
 		return 0, false
 	}
 }

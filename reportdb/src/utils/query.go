@@ -19,7 +19,7 @@ type Query struct {
 
 	GroupByObjects bool `json:"group_by_objects"`
 
-	Interval string `json:"interval"`
+	Interval int `json:"interval"`
 }
 
 type Response struct {

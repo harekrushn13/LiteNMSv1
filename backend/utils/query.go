@@ -1,19 +1,19 @@
 package utils
 
 type QueryRequest struct {
-	CounterID uint16 `json:"counter_id"`
+	CounterID uint16 `json:"counter_id" binding:"required"`
 
 	ObjectIDs []uint32 `json:"object_ids,omitempty" binding:"required"`
 
-	From uint32 `json:"from"`
+	From uint32 `json:"from" binding:"required"`
 
-	To uint32 `json:"to"`
+	To uint32 `json:"to" binding:"required"`
 
-	Aggregation string `json:"aggregation,omitempty"`
+	Aggregation string `json:"aggregation,omitempty" binding:"required"`
 
 	GroupByObjects bool `json:"group_by_objects,omitempty"`
 
-	Interval string `json:"interval,omitempty"`
+	Interval int `json:"interval,omitempty"`
 }
 
 type QueryMap struct {

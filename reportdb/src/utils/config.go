@@ -16,15 +16,13 @@ type Config struct {
 
 	DataBuffer int `json:"dataBuffer"`
 
-	EventsBuffer int `json:"eventsBuffer"`
+	ResponseBuffer int `json:"responseBuffer"`
 
-	QueryWorkers int `json:"queryWorkers"`
+	EventsBuffer int `json:"eventsBuffer"`
 
 	QueryBuffer int `json:"queryBuffer"`
 
 	DayWorkers int `json:"dayWorkers"`
-
-	WriterEventBuffer int `json:"writerEventBuffer"`
 
 	FileGrowthSize int `json:"fileGrowthSize"`
 
@@ -156,14 +154,14 @@ func GetDataBuffer() int {
 	return appConfig.DataBuffer
 }
 
+func GetResponseBuffer() int {
+
+	return appConfig.ResponseBuffer
+}
+
 func GetEventsBuffer() int {
 
 	return appConfig.EventsBuffer
-}
-
-func GetQueryWorkers() int {
-
-	return appConfig.QueryWorkers
 }
 
 func GetQueryBuffer() int {
@@ -174,11 +172,6 @@ func GetQueryBuffer() int {
 func GetDayWorkers() int {
 
 	return appConfig.DayWorkers
-}
-
-func GetWriterEventBuffer() int {
-
-	return appConfig.WriterEventBuffer
 }
 
 func GetFileGrowthSize() int {

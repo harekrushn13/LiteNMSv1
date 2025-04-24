@@ -19,14 +19,10 @@ import (
 
 func main() {
 
-	// For profiling
-
 	go func() {
 
 		http.ListenAndServe("localhost:6060", nil)
 	}()
-
-	// for MemStats
 
 	var stat runtime.MemStats
 
@@ -47,13 +43,9 @@ func main() {
 		}
 	}()
 
-	// Handle Interrupts
-
 	signalChannel := make(chan os.Signal, 1)
 
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
-
-	// Initialise Config
 
 	err := InitConfig()
 
@@ -64,11 +56,7 @@ func main() {
 		return
 	}
 
-	// Initialise dataChannel with eventsBuffer
-
-	dataChannel := make(chan []Events, GetDataBuffer()) // buffer to receive []Events
-
-	// pollingServer to receive data from poller
+	dataChannel := make(chan []Events, GetDataBuffer())
 
 	pollingServer, err := NewPollingServer(dataChannel)
 
@@ -79,11 +67,7 @@ func main() {
 		return
 	}
 
-	// Initialise storePool for storeEngine
-
 	storePool := NewStorePool()
-
-	// Initialise multiple writer to handle event
 
 	writers, err := StartWriter(storePool)
 
@@ -94,15 +78,9 @@ func main() {
 		return
 	}
 
-	// Distribute batch data among multiple writers
-
 	DistributeData(dataChannel, writers)
 
-	// query responseChannel
-
-	responseChannel := make(chan Response, 3)
-
-	// Initialise multiple readers
+	responseChannel := make(chan Response, GetResponseBuffer())
 
 	readers, err := StartReaders(storePool, responseChannel)
 
@@ -113,11 +91,7 @@ func main() {
 		return
 	}
 
-	// Initialise queryChannel with buffer
-
-	queryChannel := make(chan QueryReceive, 10)
-
-	// Initialise queryServer to receive query from clients
+	queryChannel := make(chan QueryReceive, GetQueryBuffer())
 
 	queryServer, err := NewQueryServer(queryChannel, responseChannel)
 
@@ -128,11 +102,7 @@ func main() {
 		return
 	}
 
-	// Distribute query among readers
-
 	DistributeQuery(queryChannel, readers)
-
-	// save index file for those day who written new data
 
 	err = storePool.SaveEngine()
 
@@ -142,8 +112,6 @@ func main() {
 
 		return
 	}
-
-	// close all resources
 
 	<-signalChannel
 

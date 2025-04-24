@@ -25,7 +25,7 @@ type Reader struct {
 
 	dayResultMapping map[string]map[uint32][]DataPoint // keep day-result mapping for caching counter_id-object_id
 
-	results map[uint32][]DataPoint // final result of query
+	results map[uint32][]DataPoint // result of query
 
 	lock *sync.Mutex
 }
@@ -251,7 +251,6 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 	reader.lock.Lock()
 
-	//reader.results = reader.results[:0]
 	reader.results = make(map[uint32][]DataPoint)
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
@@ -264,15 +263,12 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 				if len(data) > 0 {
 
-					//reader.results = append(reader.results, data)
-
 					reader.results[ObjectId] = data
 				}
 
 				if !current.After(fromTime) || !current.Before(toTime) {
 
 					delete(reader.dayResultMapping[path], ObjectId)
-
 				}
 			}
 		}

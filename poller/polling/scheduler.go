@@ -44,6 +44,8 @@ func (poller *Poller) startScheduler() {
 			}
 
 			poller.taskLock.Unlock()
+
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 }
