@@ -79,14 +79,7 @@ func (storePool *StorePool) engineAvailable(path string) bool {
 
 func (storePool *StorePool) SaveEngine() error {
 
-	saveIndexInterval, err := GetSaveIndexInterval()
-
-	if err != nil {
-
-		return fmt.Errorf("storePool.SaveEngine error : %v", err.Error())
-	}
-
-	ticker := time.NewTicker(time.Duration(saveIndexInterval) * time.Second)
+	ticker := time.NewTicker(time.Duration(GetSaveIndexInterval()) * time.Second)
 
 	go func(storePool *StorePool, ticker *time.Ticker) {
 

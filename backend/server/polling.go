@@ -99,8 +99,6 @@ func (server *PollingServer) pollingReceiver(dataChannel chan []byte) {
 
 			server.pullSocket.Close()
 
-			close(dataChannel)
-
 			server.shutdownPull <- true
 
 			return

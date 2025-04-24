@@ -1,47 +1,56 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	. "poller/polling"
 	. "poller/server"
 	. "poller/utils"
-	"sync"
+	"syscall"
+	"time"
 )
 
 func main() {
+
+	signalChannel := make(chan os.Signal, 1)
+
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	err := InitConfig()
 
 	if err != nil {
 
-		log.Fatal("InitConfig error: ", err)
+		log.Printf("InitConfig error: %v", err)
 
 		return
 	}
 
-	var waitGroup sync.WaitGroup
+	deviceChannel := make(chan []Device, GetDeviceBuffer())
 
-	deviceChannel := make(chan []Device, 1)
+	dataChannel := make(chan []Events, GetDataBuffer())
 
-	dataChannel := make(chan []Events, 20)
-
-	_, err = NewPollingServer(deviceChannel, dataChannel)
+	pollingServer, err := NewPollingServer(deviceChannel, dataChannel)
 
 	if err != nil {
 
-		log.Fatal("NewPollingServer error: ", err)
+		log.Printf("NewPollingServer error: %v", err)
+
+		return
 	}
 
-	go func() {
+	poller := NewPoller()
 
-		for device := range deviceChannel {
+	poller.SetProvisionedDevices(deviceChannel)
 
-			SetProvisionedDevices(device)
-		}
+	poller.StartPolling(dataChannel)
 
-	}()
+	<-signalChannel
 
-	PollData(dataChannel, &waitGroup)
+	fmt.Println("\nstart shutting down : ", time.Now())
 
-	waitGroup.Wait()
+	pollingServer.Shutdown()
+
+	fmt.Println("\nshutdown", time.Now())
 }

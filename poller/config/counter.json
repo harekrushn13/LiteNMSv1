@@ -12,6 +12,6 @@
   "3": {
     "name": "qwe.asd.xyz",
     "type": "string",
-    "polling": 3
+    "polling": 5
   }
 }

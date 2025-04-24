@@ -1,11 +1,13 @@
 {
-  "writers": 5,
-  "readers": 5,
+  "writers": 10,
+  "readers": 10,
   "partitions": 3,
-  "eventsBuffer": 20,
+  "dataBuffer": 20,
+  "eventsBuffer": 1000,
   "queryWorkers": 10,
   "queryBuffer": 10,
-  "dayWorkers": 5,
+  "dayWorkers": 10,
   "writerEventBuffer": 50,
-  "fileGrowthSize": 4096
+  "fileGrowthSize": 4096,
+  "saveIndexInterval": 6
 }

@@ -132,12 +132,7 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 
 func getPartitionId(key uint32) (uint8, error) {
 
-	partitions, err := GetPartitions()
-
-	if err != nil {
-
-		return 0, fmt.Errorf("GetPartitions error: %v", err)
-	}
+	partitions := uint8(GetPartitions())
 
 	index := uint8(key % uint32(partitions))
 

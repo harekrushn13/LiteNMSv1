@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/pebbe/zmq4"
 	"log"
-	. "poller/polling"
+	. "poller/utils"
 )
 
 type PollingServer struct {
@@ -99,6 +99,8 @@ func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
 
 			server.pullSocket.Close()
 
+			close(deviceChannel)
+
 			server.shutdownPull <- true
 
 			return
@@ -131,17 +133,22 @@ func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
 func (server *PollingServer) pollingSender(dataChannel chan []Events) {
 
 	for {
+
 		select {
 
 		case <-server.shutdownPush:
 
 			server.pushSocket.Close()
 
+			close(dataChannel)
+
 			server.shutdownPush <- true
 
 			return
 
 		case events := <-dataChannel:
+
+			fmt.Println("sent : ", len(events))
 
 			jsonData, err := json.Marshal(events)
 
@@ -161,4 +168,17 @@ func (server *PollingServer) pollingSender(dataChannel chan []Events) {
 
 		}
 	}
+}
+
+func (server *PollingServer) Shutdown() {
+
+	server.shutdownPull <- true
+
+	server.shutdownPush <- true
+
+	server.context.Term()
+
+	<-server.shutdownPull
+
+	<-server.shutdownPush
 }

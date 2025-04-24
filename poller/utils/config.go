@@ -6,13 +6,19 @@ import (
 	"os"
 )
 
-type Interval string
+type Configuration struct {
+	DeviceBuffer int `json:"deviceBuffer"`
 
-const (
-	BatchInterval Interval = "batchInterval"
-)
+	DataBuffer int `json:"dataBuffer"`
 
-var intervalMapping = map[Interval]int64{}
+	Workers int `json:"workers"`
+
+	EventBuffer int `json:"eventBuffer"`
+
+	BatchInterval int `json:"batchInterval"`
+}
+
+var config Configuration
 
 type DataType uint8
 
@@ -45,18 +51,18 @@ func InitConfig() error {
 		return fmt.Errorf("get current path err: %v", err)
 	}
 
-	timerPath := currentPath + "/config/timer.json"
+	configPath := currentPath + "/config/config.json"
 
-	timerData, err := os.ReadFile(timerPath)
+	configData, err := os.ReadFile(configPath)
 
 	if err != nil {
 
-		return fmt.Errorf("read timer.json file error: %s", err)
+		return fmt.Errorf("read config.json file error: %s", err)
 	}
 
-	if err := json.Unmarshal(timerData, &intervalMapping); err != nil {
+	if err := json.Unmarshal(configData, &config); err != nil {
 
-		return fmt.Errorf("parse timer.json file error: %s", err)
+		return fmt.Errorf("parse config.json file error: %s", err)
 	}
 
 	counterPath := currentPath + "/config/counter.json"
@@ -98,28 +104,34 @@ func InitConfig() error {
 	return nil
 }
 
-func GetBatchInterval() int64 {
+func GetDeviceBuffer() int {
 
-	value, _ := intervalMapping[BatchInterval]
+	return config.DeviceBuffer
+}
 
-	return value
+func GetDataBuffer() int {
+
+	return config.DataBuffer
+}
+
+func GetWorkerCount() int {
+
+	return config.Workers
+}
+
+func GetEventBuffer() int {
+
+	return config.EventBuffer
+}
+
+func GetBatchInterval() int {
+
+	return config.BatchInterval
 }
 
 func GetCounterType(counterId uint16) DataType {
 
-	value, _ := counterMapping[counterId]
-
-	return value
-}
-
-func GetCounterName(counterId uint16) string {
-
-	if config, exists := counterConfigs[counterId]; exists {
-
-		return config.Name
-	}
-
-	return ""
+	return counterMapping[counterId]
 }
 
 func GetCounterPollingInterval(counterId uint16) int64 {

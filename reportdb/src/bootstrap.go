@@ -66,16 +66,7 @@ func main() {
 
 	// Initialise dataChannel with eventsBuffer
 
-	eventsBuffer, err := GetEventsBuffer()
-
-	if err != nil {
-
-		log.Printf("Error initializing events buffer: %v", err)
-
-		return
-	}
-
-	dataChannel := make(chan []Events, eventsBuffer) // buffer to receive []Events
+	dataChannel := make(chan []Events, GetDataBuffer()) // buffer to receive []Events
 
 	// pollingServer to receive data from poller
 

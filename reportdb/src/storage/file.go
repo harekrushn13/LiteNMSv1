@@ -144,12 +144,7 @@ func (fileManager *FileManager) CheckCapacity(handle *FileHandle, entryList []*I
 		}
 	}
 
-	fileGrowthSize, err := GetFileGrowthSize()
-
-	if err != nil {
-
-		return nil, err
-	}
+	fileGrowthSize := int64(GetFileGrowthSize())
 
 	handle.availableSize = handle.lastBlockEnd + fileGrowthSize
 

@@ -31,11 +31,18 @@ func main() {
 
 	defer DB.Close()
 
-	deviceChannel := make(chan []PollerDevice, 5)
+	if err := InitConfig(); err != nil {
 
-	dataChannel := make(chan []byte, 5)
+		log.Printf("Failed to initialize config: %v", err)
 
-	queryChannel := make(chan QueryMap, 5)
+		return
+	}
+
+	deviceChannel := make(chan []PollerDevice, GetDeviceBuffer())
+
+	dataChannel := make(chan []byte, GetDataBuffer())
+
+	queryChannel := make(chan QueryMap, GetQueryBuffer())
 
 	queryMapping := make(map[uint64]chan Response)
 
@@ -110,11 +117,7 @@ func main() {
 
 	pollingServer.Shutdown()
 
-	fmt.Println("1")
-
 	dbServer.Shutdown()
-
-	fmt.Println("2")
 
 	queryServer.Shutdown()
 

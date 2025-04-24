@@ -105,8 +105,7 @@ func (server *QueryServer) querySender(queryChannel chan QueryMap, queryMapping 
 
 			return
 
-		default:
-			queryMap := <-queryChannel
+		case queryMap := <-queryChannel:
 
 			querySend := QuerySend{
 
@@ -119,14 +118,14 @@ func (server *QueryServer) querySender(queryChannel chan QueryMap, queryMapping 
 
 			if err != nil {
 
-				log.Printf("failed to marshal query: %v", err)
+				log.Printf("querySender: failed to marshal query: %v", err)
 
 				continue
 			}
 
 			if _, err := server.pushSocket.SendBytes(queryBytes, 0); err != nil {
 
-				log.Printf("failed to send query: %v", err)
+				log.Printf("querySender: failed to send query: %v", err)
 
 				continue
 			}
@@ -156,7 +155,7 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 
 			if err != nil {
 
-				log.Printf("Error receiving response: %v", err)
+				log.Printf("responseReceiver: Error receiving response: %v", err)
 
 				continue
 			}
@@ -165,7 +164,7 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 
 			if err := json.Unmarshal(data, &response); err != nil {
 
-				log.Printf("Error unmarshaling response: %v", err)
+				log.Printf("responseReceiver: Error unmarshaling response: %v", err)
 
 				continue
 			}

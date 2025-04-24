@@ -166,7 +166,7 @@ func (queryServer *QueryServer) responseSender(resultChannel chan Response) {
 
 			if response.Error == "" {
 
-				fmt.Println("response :", response)
+				fmt.Println("response given :", response.RequestID)
 			}
 		}
 	}

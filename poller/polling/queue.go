@@ -9,25 +9,28 @@ type Task struct {
 
 	Interval time.Duration
 
-	Index int // for heap operations
+	Index int
 }
 
 type PriorityQueue []*Task
 
-func (pq PriorityQueue) Len() int { return len(pq) }
+func (pq *PriorityQueue) Len() int {
 
-func (pq PriorityQueue) Less(i, j int) bool {
-
-	return pq[i].NextExecution.Before(pq[j].NextExecution)
+	return len(*pq)
 }
 
-func (pq PriorityQueue) Swap(i, j int) {
+func (pq *PriorityQueue) Less(i, j int) bool {
 
-	pq[i], pq[j] = pq[j], pq[i]
+	return (*pq)[i].NextExecution.Before((*pq)[j].NextExecution)
+}
 
-	pq[i].Index = i
+func (pq *PriorityQueue) Swap(i, j int) {
 
-	pq[j].Index = j
+	(*pq)[i], (*pq)[j] = (*pq)[j], (*pq)[i]
+
+	(*pq)[i].Index = i
+
+	(*pq)[j].Index = j
 }
 
 func (pq *PriorityQueue) Push(x interface{}) {
@@ -49,9 +52,9 @@ func (pq *PriorityQueue) Pop() interface{} {
 
 	item := old[n-1]
 
-	old[n-1] = nil // avoid memory leak
+	old[n-1] = nil
 
-	item.Index = -1 // for safety
+	item.Index = -1
 
 	*pq = old[0 : n-1]
 

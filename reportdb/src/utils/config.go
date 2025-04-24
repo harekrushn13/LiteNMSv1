@@ -7,31 +7,29 @@ import (
 	"path/filepath"
 )
 
-type ConfigType = string
+type Config struct {
+	Writers int `json:"writers"`
 
-const (
-	writers ConfigType = "writers"
+	Readers int `json:"readers"`
 
-	readers ConfigType = "readers"
+	Partitions int `json:"partitions"`
 
-	partitions ConfigType = "partitions"
+	DataBuffer int `json:"dataBuffer"`
 
-	eventsBuffer ConfigType = "eventsBuffer"
+	EventsBuffer int `json:"eventsBuffer"`
 
-	queryWorkers ConfigType = "queryWorkers"
+	QueryWorkers int `json:"queryWorkers"`
 
-	queryBuffer ConfigType = "queryBuffer"
+	QueryBuffer int `json:"queryBuffer"`
 
-	dayWorkers ConfigType = "dayWorkers"
+	DayWorkers int `json:"dayWorkers"`
 
-	writerEventBuffer ConfigType = "writerEventBuffer"
+	WriterEventBuffer int `json:"writerEventBuffer"`
 
-	fileGrowthSize ConfigType = "fileGrowthSize"
-)
+	FileGrowthSize int `json:"fileGrowthSize"`
 
-var WorkingDirectory ConfigType
-
-var configMapping = map[string]int{}
+	SaveIndexInterval int `json:"saveIndexInterval"`
+}
 
 type DataType uint8
 
@@ -43,15 +41,19 @@ const (
 	TypeString
 )
 
-var counterMapping = map[uint16]DataType{}
+type CounterConfig struct {
+	Name string `json:"name"`
 
-type Interval string
+	Type string `json:"type"`
+}
 
-const (
-	SaveIndexInterval Interval = "saveIndexInterval"
+var (
+	appConfig Config
+
+	counterTypes = map[uint16]DataType{}
+
+	workingDir string
 )
-
-var intervalMapping = map[Interval]int64{}
 
 type Events struct {
 	ObjectId uint32
@@ -72,27 +74,23 @@ func InitConfig() error {
 		return fmt.Errorf("get current path err: %v", err)
 	}
 
-	WorkingDirectory = filepath.Dir(currentPath) // ./reportdb
+	workingDir = filepath.Dir(currentPath) // ./reportdb
 
-	// Read config.json
-
-	configPath := WorkingDirectory + "/config/config.json"
+	configPath := workingDir + "/config/config.json"
 
 	configData, err := os.ReadFile(configPath)
 
 	if err != nil {
 
-		return fmt.Errorf("read config.json file error: %s", err)
+		return fmt.Errorf("read timer.json file error: %s", err)
 	}
 
-	if err := json.Unmarshal(configData, &configMapping); err != nil {
+	if err := json.Unmarshal(configData, &appConfig); err != nil {
 
-		return fmt.Errorf("parse config.json file error: %s", err)
+		return fmt.Errorf("parse timer.json file error: %s", err)
 	}
 
-	// Read counter.json
-
-	counterPath := WorkingDirectory + "/config/counter.json"
+	counterPath := workingDir + "/config/counter.json"
 
 	counterData, err := os.ReadFile(counterPath)
 
@@ -101,11 +99,7 @@ func InitConfig() error {
 		return fmt.Errorf("read counter.json file error: %s", err)
 	}
 
-	tempCounterMapping := map[uint16]struct {
-		Name string `json:"name"`
-
-		Type string `json:"type"`
-	}{}
+	tempCounterMapping := map[uint16]CounterConfig{}
 
 	if err := json.Unmarshal(counterData, &tempCounterMapping); err != nil {
 
@@ -118,14 +112,14 @@ func InitConfig() error {
 
 		case "uint64":
 
-			counterMapping[key] = TypeUint64
+			counterTypes[key] = TypeUint64
 
 		case "float64":
 
-			counterMapping[key] = TypeFloat64
+			counterTypes[key] = TypeFloat64
 
 		case "string":
-			counterMapping[key] = TypeString
+			counterTypes[key] = TypeString
 
 		default:
 
@@ -134,165 +128,82 @@ func InitConfig() error {
 
 	}
 
-	tempCounterMapping = nil
-
-	// Read timer.go
-
-	timerPath := WorkingDirectory + "/config/timer.json"
-
-	timerData, err := os.ReadFile(timerPath)
-
-	if err != nil {
-
-		return fmt.Errorf("read timer.json file error: %s", err)
-	}
-
-	if err := json.Unmarshal(timerData, &intervalMapping); err != nil {
-
-		return fmt.Errorf("parse timer.json file error: %s", err)
-	}
-
 	return nil
 }
 
-func GetWorkingDirectory() (ConfigType, error) {
+func GetWorkingDirectory() string {
 
-	if WorkingDirectory == "" {
-
-		return "", fmt.Errorf("InitConfig : working directory is empty")
-	}
-
-	return WorkingDirectory, nil
+	return workingDir
 }
 
-func GetWriters() (uint8, error) {
+func GetWriters() int {
 
-	value, ok := configMapping[writers]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : writer not found")
-	}
-
-	return uint8(value), nil
+	return appConfig.Writers
 }
 
-func GetReaders() (uint8, error) {
+func GetReaders() int {
 
-	value, ok := configMapping[readers]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : reader not found")
-	}
-
-	return uint8(value), nil
+	return appConfig.Readers
 }
 
-func GetPartitions() (uint8, error) {
+func GetPartitions() int {
 
-	value, ok := configMapping[partitions]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : partitions not found")
-	}
-
-	return uint8(value), nil
+	return appConfig.Partitions
 }
 
-func GetEventsBuffer() (uint8, error) {
+func GetDataBuffer() int {
 
-	value, ok := configMapping[eventsBuffer]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : events buffer not found")
-	}
-
-	return uint8(value), nil
+	return appConfig.DataBuffer
 }
 
-func GetQueryWorkers() (uint8, error) {
+func GetEventsBuffer() int {
 
-	value, ok := configMapping[queryWorkers]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : queryWorkers not found")
-	}
-
-	return uint8(value), nil
+	return appConfig.EventsBuffer
 }
 
-func GetQueryBuffer() (uint8, error) {
+func GetQueryWorkers() int {
 
-	value, ok := configMapping[queryBuffer]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : queryBuffer not found")
-	}
-
-	return uint8(value), nil
+	return appConfig.QueryWorkers
 }
 
-func GetDayWorkers() (uint8, error) {
+func GetQueryBuffer() int {
 
-	value, ok := configMapping[dayWorkers]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : dayWorkers not found")
-	}
-
-	return uint8(value), nil
+	return appConfig.QueryBuffer
 }
 
-func GetWriterEventBuffer() (uint16, error) {
+func GetDayWorkers() int {
 
-	value, ok := configMapping[writerEventBuffer]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : writer task queue buffer not found")
-	}
-
-	return uint16(value), nil
+	return appConfig.DayWorkers
 }
 
-func GetFileGrowthSize() (int64, error) {
+func GetWriterEventBuffer() int {
 
-	value, ok := configMapping[fileGrowthSize]
+	return appConfig.WriterEventBuffer
+}
 
-	if !ok {
+func GetFileGrowthSize() int {
 
-		return 0, fmt.Errorf("InitConfig : file growth size not found")
-	}
+	return appConfig.FileGrowthSize
+}
 
-	return int64(value), nil
+func GetSaveIndexInterval() int {
+
+	return appConfig.SaveIndexInterval
 }
 
 func GetCounterType(counterId uint16) (DataType, error) {
 
-	value, ok := counterMapping[counterId]
+	dataType, ok := counterTypes[counterId]
 
 	if !ok {
 
-		return 0, fmt.Errorf("InitConfig : counter id %d not found", counterId)
+		return 0, fmt.Errorf("counter ID %d not found", counterId)
 	}
 
-	return value, nil
+	return dataType, nil
 }
 
-func GetSaveIndexInterval() (int64, error) {
+func GetAllCounterTypes() map[uint16]DataType {
 
-	value, ok := intervalMapping[SaveIndexInterval]
-
-	if !ok {
-
-		return 0, fmt.Errorf("InitConfig : saveIndexInterval not found")
-	}
-
-	return value, nil
+	return counterTypes
 }

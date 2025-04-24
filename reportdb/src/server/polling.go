@@ -93,6 +93,8 @@ func (server *PollingServer) pollingReceiver(dataChannel chan []Events) {
 				continue
 			}
 
+			fmt.Println("received : ", len(events))
+
 			dataChannel <- events
 		}
 	}

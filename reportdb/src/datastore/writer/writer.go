@@ -29,17 +29,9 @@ func StartWriter(storePool *StorePool) ([]*Writer, error) {
 		return nil, fmt.Errorf("StartWriter : Error getting writers: %v", err)
 	}
 
-	workingDirectory, err := GetWorkingDirectory()
-
-	if err != nil {
-
-		return nil, fmt.Errorf("writer.runWriter : Error getting working directory: %v", err)
-
-	}
-
 	for _, writer := range writers {
 
-		writer.runWriter(workingDirectory)
+		writer.runWriter(GetWorkingDirectory())
 	}
 
 	return writers, nil
@@ -47,21 +39,7 @@ func StartWriter(storePool *StorePool) ([]*Writer, error) {
 
 func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 
-	numWriters, err := GetWriters()
-
-	if err != nil {
-
-		return nil, fmt.Errorf("initializeWriters : Error getting writers: %v", err)
-	}
-
-	eventsBuffer, err := GetWriterEventBuffer()
-
-	if err != nil {
-
-		return nil, fmt.Errorf("initializeWriters : Error getting writers: %v", err)
-	}
-
-	writers := make([]*Writer, numWriters)
+	writers := make([]*Writer, GetWriters())
 
 	for i := range writers {
 
@@ -69,7 +47,7 @@ func initializeWriters(storePool *StorePool) ([]*Writer, error) {
 
 			id: uint8(i),
 
-			events: make(chan Events, eventsBuffer),
+			events: make(chan Events, GetEventsBuffer()),
 
 			storePool: storePool,
 

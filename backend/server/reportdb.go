@@ -65,6 +65,8 @@ func (server *DBServer) dbSender(dataChannel chan []byte) {
 
 			server.pushSocket.Close()
 
+			close(dataChannel)
+
 			server.shutdownPush <- true
 
 			return

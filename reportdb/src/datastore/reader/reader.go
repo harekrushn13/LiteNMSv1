@@ -55,28 +55,7 @@ func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader,
 
 func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
 
-	numReaders, err := GetReaders()
-
-	if err != nil {
-
-		return nil, fmt.Errorf("initializeReaders : Error getting readres: %v", err)
-	}
-
-	dayWorkers, err := GetDayWorkers()
-
-	if err != nil {
-
-		return nil, fmt.Errorf("initializeReaders : Error getting dayWorkers: %v", err)
-	}
-
-	queryBuffer, err := GetQueryBuffer()
-
-	if err != nil {
-
-		return nil, fmt.Errorf("initializeReaders : Error getting queryBuffer: %v", err)
-	}
-
-	readers := make([]*Reader, numReaders)
+	readers := make([]*Reader, GetReaders())
 
 	for i := range readers {
 
@@ -84,9 +63,9 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			id: uint8(i),
 
-			dayPool: make(chan struct{}, dayWorkers),
+			dayPool: make(chan struct{}, GetDayWorkers()),
 
-			queryEvents: make(chan QueryReceive, queryBuffer),
+			queryEvents: make(chan QueryReceive, GetQueryBuffer()),
 
 			resultChannel: resultChannel,
 
@@ -101,7 +80,7 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 			lock: &sync.Mutex{},
 		}
 
-		for j := uint8(0); j < dayWorkers; j++ {
+		for j := 0; j < GetDayWorkers(); j++ {
 
 			readers[i].dayPool <- struct{}{}
 		}
@@ -126,7 +105,14 @@ func (reader *Reader) runReader() {
 
 				log.Printf("Error fetching data from reader: %v", err)
 
-				continue
+				response := Response{
+
+					RequestID: query.RequestID,
+
+					Error: err.Error(),
+				}
+
+				reader.resultChannel <- response
 			}
 
 			parseResult, err := ParseResult(results, query.Query)
@@ -182,7 +168,7 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 	toTime := time.Unix(int64(query.To), 0).Truncate(24 * time.Hour).UTC()
 
-	workingDirectory, err := GetWorkingDirectory()
+	workingDirectory := GetWorkingDirectory()
 
 	if err != nil {
 

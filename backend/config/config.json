@@ -1,0 +1,5 @@
+{
+  "deviceBuffer": 5,
+  "dataBuffer": 5,
+  "queryBuffer": 50
+}

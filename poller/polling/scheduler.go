@@ -6,36 +6,18 @@ import (
 	"golang.org/x/crypto/ssh"
 	"log"
 	. "poller/utils"
+	"strings"
+	"sync"
 	"time"
 )
 
-func InitScheduler(batch *[]Events) {
-
-	pq := make(PriorityQueue, 0)
-
-	taskQueue = &pq
-
-	heap.Init(taskQueue)
-
-	workerChan = make(chan *Task, 10)
-
-	shutdownChan = make(chan struct{})
-
-	go startScheduler()
-
-	for i := 0; i < 5; i++ { // 5 workers
-
-		go startWorker(batch)
-	}
-}
-
-func startScheduler() {
+func (poller *Poller) startScheduler() {
 
 	for {
 
 		select {
 
-		case <-shutdownChan:
+		case <-poller.shutdownChan:
 
 			return
 
@@ -43,53 +25,60 @@ func startScheduler() {
 
 			now := time.Now()
 
-			taskLock.Lock()
+			poller.taskLock.Lock()
 
-			if taskQueue.Len() > 0 {
+			if poller.taskQueue.Len() > 0 {
 
-				nextTask := (*taskQueue)[0]
+				nextTask := poller.taskQueue[0]
 
-				if nextTask.NextExecution.Before(now) || nextTask.NextExecution.Equal(now) {
+				if !nextTask.NextExecution.After(now) {
 
-					task := heap.Pop(taskQueue).(*Task)
+					task := heap.Pop(&poller.taskQueue).(*Task)
 
-					workerChan <- task
+					poller.workerChan <- task
 
 					task.NextExecution = now.Add(task.Interval)
 
-					heap.Push(taskQueue, task)
+					heap.Push(&poller.taskQueue, task)
 				}
 			}
 
-			taskLock.Unlock()
+			poller.taskLock.Unlock()
 		}
 	}
 }
 
-func startWorker(batch *[]Events) {
+func (poller *Poller) startWorker(eventChannel chan Events) {
+
+	pollDevicePool := make(chan struct{}, 50)
+
+	for i := 0; i < 50; i++ {
+
+		pollDevicePool <- struct{}{}
+	}
 
 	for {
 
 		select {
 
-		case <-shutdownChan:
+		case <-poller.shutdownChan:
 
 			return
 
-		case task := <-workerChan:
+		case task := <-poller.workerChan:
 
-			pollCounter(task.CounterID, batch)
+			poller.pollCounter(task.CounterID, eventChannel, pollDevicePool)
 		}
 	}
 }
 
-func pollCounter(counterID uint16, batch *[]Events) {
+func (poller *Poller) pollCounter(counterID uint16, eventChannel chan Events, pollDevicePool chan struct{}) {
 
-	devicesLock.RLock()
+	poller.devicesLock.RLock()
 
-	defer devicesLock.RUnlock()
+	defer poller.devicesLock.RUnlock()
 
-	deviceList, exists := devices[counterID]
+	deviceList, exists := poller.devices[counterID]
 
 	if !exists || len(deviceList) == 0 {
 
@@ -98,39 +87,59 @@ func pollCounter(counterID uint16, batch *[]Events) {
 
 	timestamp := uint32(time.Now().Unix())
 
+	var wg sync.WaitGroup
+
 	for _, device := range deviceList {
 
-		value, err := getCounterViaSSH(device, counterID)
+		<-pollDevicePool
 
-		if err != nil {
+		wg.Add(1)
 
-			log.Printf("Error polling device %s (ID: %d) for counter %d: %v\n",
-				device.IP, device.ObjectID, counterID, err)
+		go func() {
 
-			continue
-		}
+			defer wg.Done()
 
-		*batch = append(*batch, Events{
+			defer func() {
 
-			ObjectId: device.ObjectID,
+				pollDevicePool <- struct{}{}
+			}()
 
-			CounterId: counterID,
+			data, err := fetchDataViaSSH(device, counterID)
 
-			Timestamp: timestamp,
+			if err != nil {
 
-			Value: value,
-		})
+				log.Printf("pollCounter: Error polling device %s (ObjectID: %d) for counter %d: %v\n",
+					device.IP, device.ObjectID, counterID, err)
+
+				return
+			}
+
+			eventChannel <- Events{
+
+				ObjectId: device.ObjectID,
+
+				CounterId: counterID,
+
+				Timestamp: timestamp,
+
+				Value: data,
+			}
+
+		}()
 	}
+
+	wg.Wait()
 
 }
 
-func getCounterViaSSH(device Device, counterId uint16) (interface{}, error) {
+func fetchDataViaSSH(device Device, counterId uint16) (interface{}, error) {
 
 	config := &ssh.ClientConfig{
 
 		User: device.Username,
 
 		Auth: []ssh.AuthMethod{
+
 			ssh.Password(device.Password),
 		},
 
@@ -201,10 +210,11 @@ func getCounterViaSSH(device Device, counterId uint16) (interface{}, error) {
 
 	case TypeString:
 
-		return string(output), nil
+		return strings.TrimSpace(string(output)), nil
 
 	default:
 
 		return nil, fmt.Errorf("unsupported counter type")
 	}
+
 }

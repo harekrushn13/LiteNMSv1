@@ -7,134 +7,68 @@ import (
 	"time"
 )
 
-type Events struct {
-	ObjectId uint32
-
-	CounterId uint16
-
-	Timestamp uint32
-
-	Value interface{}
-}
-type Device struct {
-	ObjectID uint32 `json:"object_id"`
-
-	IP string `json:"ip"`
-
-	CredentialID uint16 `json:"credential_id"`
-
-	DiscoveryID uint16 `json:"discovery_id"`
-
-	Username string `json:"username"`
-
-	Password string `json:"password"`
-
-	Port uint16 `json:"port"`
-}
-
-var (
-	devices = make(map[uint16][]Device)
+type Poller struct {
+	devices map[uint16][]Device // map[counterID]->[]Devices
 
 	devicesLock sync.RWMutex
 
-	taskQueue *PriorityQueue
+	taskQueue PriorityQueue
 
 	taskLock sync.Mutex
 
 	workerChan chan *Task
 
 	shutdownChan chan struct{}
-)
 
-func SetProvisionedDevices(newDevices []Device) {
+	batchInterval time.Duration
 
-	devicesLock.Lock()
+	numWorkers int
+}
 
-	defer devicesLock.Unlock()
+func NewPoller() *Poller {
 
-	devices = make(map[uint16][]Device)
+	return &Poller{
 
-	counters := GetAllCounters()
+		devices: make(map[uint16][]Device),
 
-	for _, newDevice := range newDevices {
+		taskQueue: make(PriorityQueue, 0),
 
-		for counterID, _ := range counters {
+		workerChan: make(chan *Task, 10),
 
-			exists := false
+		shutdownChan: make(chan struct{}),
 
-			for _, existingDevice := range devices[counterID] {
+		batchInterval: time.Duration(GetBatchInterval()) * time.Millisecond,
 
-				if existingDevice.ObjectID == newDevice.ObjectID && existingDevice.IP == newDevice.IP && existingDevice.CredentialID == newDevice.CredentialID && existingDevice.DiscoveryID == newDevice.DiscoveryID {
-
-					exists = true
-
-					break
-				}
-			}
-
-			if !exists {
-
-				devices[counterID] = append(devices[counterID], newDevice)
-			}
-		}
-	}
-
-	if len(newDevices) > 0 {
-
-		createTaskQueue()
+		numWorkers: GetWorkerCount(),
 	}
 }
 
-func createTaskQueue() {
+func (poller *Poller) StartPolling(dataChannel chan []Events) {
 
-	taskLock.Lock()
+	eventChannel := make(chan Events, GetEventBuffer())
 
-	defer taskLock.Unlock()
+	for i := 0; i < poller.numWorkers; i++ {
 
-	*taskQueue = (*taskQueue)[:0]
-
-	now := time.Now()
-
-	for counterID := range devices {
-
-		if len(devices[counterID]) > 0 {
-
-			interval := time.Duration(GetCounterPollingInterval(counterID)) * time.Second
-
-			if interval > 0 {
-
-				heap.Push(taskQueue, &Task{
-
-					CounterID: counterID,
-
-					NextExecution: now.Add(interval),
-
-					Interval: interval,
-				})
-			}
-		}
+		go poller.startWorker(eventChannel)
 	}
-}
 
-func PollData(dataChannel chan []Events, waitGroup *sync.WaitGroup) {
+	heap.Init(&poller.taskQueue)
 
-	waitGroup.Add(1)
+	go poller.startScheduler()
 
 	go func() {
-
-		defer waitGroup.Done()
 
 		var batch []Events
 
 		batchTicker := time.NewTicker(time.Duration(GetBatchInterval()) * time.Millisecond)
 
-		defer batchTicker.Stop()
-
-		InitScheduler(&batch)
-
 		for {
 
 			select {
+
+			case event := <-eventChannel:
+
+				batch = append(batch, event)
 
 			case <-batchTicker.C:
 

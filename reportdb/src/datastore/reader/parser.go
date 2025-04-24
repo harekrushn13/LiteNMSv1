@@ -15,6 +15,18 @@ func ParseResult(results map[uint32][]DataPoint, query Query) (interface{}, erro
 		return nil, fmt.Errorf("no data available for processing")
 	}
 
+	dataType, err := GetCounterType(query.CounterID)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("reader.fetchData error : %v", err)
+	}
+
+	if dataType == TypeString {
+
+		return results, nil
+	}
+
 	var parsedResult interface{}
 
 	if query.Interval != "" {
@@ -27,6 +39,10 @@ func ParseResult(results map[uint32][]DataPoint, query Query) (interface{}, erro
 		}
 
 		results = bucketData(results, uint32(intervalSec), query.From, query.To)
+
+	} else {
+
+		return processGauge(results, query.Aggregation)
 	}
 
 	if query.GroupByObjects == true {
@@ -144,25 +160,17 @@ func aggregateValues(values []interface{}, aggType string) interface{} {
 	return values
 }
 
-func processGrouped(data map[uint32][]DataPoint, aggregation string) (map[uint32]interface{}, error) {
+func processGauge(data map[uint32][]DataPoint, aggregation string) (interface{}, error) {
 
-	result := make(map[uint32]interface{})
+	values := make([]interface{}, 0)
 
-	for objID, points := range data {
+	for _, points := range data {
 
-		if aggregation != "" {
+		values = append(values, extractValues(points)...)
 
-			values := extractValues(points)
-
-			result[objID] = aggregateValues(values, aggregation)
-
-		} else {
-
-			result[objID] = points
-		}
 	}
 
-	return result, nil
+	return aggregateValues(values, aggregation), nil
 }
 
 func mergeAllObjects(data map[uint32][]DataPoint) []DataPoint {
@@ -238,20 +246,6 @@ func extractValues(points []DataPoint) []interface{} {
 	}
 
 	return values
-}
-
-func isNumeric(v interface{}) bool {
-
-	switch v.(type) {
-
-	case uint64, float64:
-
-		return true
-
-	default:
-
-		return false
-	}
 }
 
 func calculateAverage(values []interface{}) float64 {
