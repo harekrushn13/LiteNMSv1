@@ -20,7 +20,7 @@ func (poller *Poller) SetProvisionedDevices(deviceChannel chan []Device) {
 
 				counters := GetAllCounters()
 
-				for counterID, _ := range counters {
+				for counterID := range counters {
 
 					for _, newDevice := range newDevices {
 

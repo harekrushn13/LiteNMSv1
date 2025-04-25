@@ -28,6 +28,11 @@ func ParseResult(results map[uint32][]DataPoint, query Query) (interface{}, erro
 
 	if query.Interval == 0 {
 
+		if query.GroupByObjects {
+
+			return GridQuery(results, query)
+		}
+
 		return GaugeQuery(results, query)
 	}
 
@@ -61,6 +66,20 @@ func HistogramQuery(results map[uint32][]DataPoint, query Query) (interface{}, e
 	return mergeAllObjects(bucketed), nil
 }
 
+func GridQuery(results map[uint32][]DataPoint, query Query) (interface{}, error) {
+
+	grid := make(map[uint32]interface{})
+
+	for objID, points := range results {
+
+		values := getValues(points)
+
+		grid[objID] = aggregateValues(values, query.Aggregation)
+	}
+
+	return grid, nil
+}
+
 func bucketData(data map[uint32][]DataPoint, interval uint32, from uint32, to uint32) map[uint32][]DataPoint {
 
 	bucketed := make(map[uint32][]DataPoint)
@@ -75,17 +94,12 @@ func bucketData(data map[uint32][]DataPoint, interval uint32, from uint32, to ui
 
 func createBuckets(points []DataPoint, interval uint32, from uint32, to uint32) []DataPoint {
 
-	if interval == 0 || from > to {
-
-		return points
-	}
-
 	sort.Slice(points, func(i, j int) bool {
 
 		return points[i].Timestamp < points[j].Timestamp
 	})
 
-	bucketMap := make(map[uint32][]interface{})
+	bucketMap := make(map[uint32][]interface{}) // map[timestamp]->[points]
 
 	for _, point := range points {
 

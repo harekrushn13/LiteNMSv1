@@ -27,7 +27,7 @@ type Reader struct {
 
 	results map[uint32][]DataPoint // result of query
 
-	lock *sync.Mutex
+	lock *sync.RWMutex
 }
 
 type DataPoint struct {
@@ -77,7 +77,7 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			results: make(map[uint32][]DataPoint),
 
-			lock: &sync.Mutex{},
+			lock: &sync.RWMutex{},
 		}
 
 		for j := 0; j < GetDayWorkers(); j++ {
@@ -170,11 +170,6 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 	workingDirectory := GetWorkingDirectory()
 
-	if err != nil {
-
-		return nil, fmt.Errorf("reader.GetWorkingDirectory error : %v", err)
-	}
-
 	wg := &sync.WaitGroup{}
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
@@ -183,10 +178,14 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 		for _, ObjectId := range query.ObjectIDs {
 
+			reader.lock.RLock()
+
 			if _, exists := reader.dayResultMapping[path][ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
 
 				continue
 			}
+
+			reader.lock.RUnlock()
 
 			<-reader.dayPool
 
