@@ -1,65 +1,117 @@
 package writer
 
 import (
+	"fmt"
 	"log"
-	"reportdb/config"
-	"reportdb/src/storage/engine"
+	. "reportdb/storage"
+	. "reportdb/utils"
 	"sync"
 )
 
-func StartWriter(pollCh <-chan []config.RowData, wg *sync.WaitGroup) {
+type Writer struct {
+	id uint8
 
-	writerChannels := make([]chan config.RowData, config.WriterCount)
+	events chan Events
 
-	for i := uint8(0); i < config.WriterCount; i++ {
+	storePool *StorePool
 
-		writerChannels[i] = make(chan config.RowData, 100)
+	waitGroup *sync.WaitGroup
 
-		wg.Add(1)
-
-		go runWriter(writerChannels[i], wg)
-	}
-
-	go func() {
-
-		for batch := range pollCh {
-
-			for _, row := range batch {
-
-				writerIdx := uint8((uint32(row.CounterId) + row.ObjectId) % uint32(config.WriterCount))
-
-				writerChannels[writerIdx] <- row
-			}
-		}
-
-		for _, ch := range writerChannels {
-
-			close(ch)
-		}
-	}()
+	data []byte // for serializing data
 }
 
-func runWriter(ch <-chan config.RowData, wg *sync.WaitGroup) {
+func StartWriter(storePool *StorePool) ([]*Writer, error) {
 
-	defer wg.Done()
-
-	for row := range ch {
-
-		if err := writeRow(row); err != nil {
-
-			log.Printf("Error writing row: %v", err)
-		}
-	}
-}
-
-func writeRow(row config.RowData) error {
-
-	err := engine.Save(row)
+	writers, err := initializeWriters(storePool)
 
 	if err != nil {
 
-		return err
+		return nil, fmt.Errorf("StartWriter : Error getting writers: %v", err)
 	}
 
-	return nil
+	for _, writer := range writers {
+
+		writer.runWriter(GetWorkingDirectory())
+	}
+
+	return writers, nil
+}
+
+func initializeWriters(storePool *StorePool) ([]*Writer, error) {
+
+	writers := make([]*Writer, GetWriters())
+
+	for i := range writers {
+
+		writers[i] = &Writer{
+
+			id: uint8(i),
+
+			events: make(chan Events, GetEventsBuffer()),
+
+			storePool: storePool,
+
+			waitGroup: &sync.WaitGroup{},
+
+			data: make([]byte, 100),
+		}
+	}
+
+	return writers, nil
+}
+
+func (writer *Writer) runWriter(workingDirectory string) {
+
+	writer.waitGroup.Add(1)
+
+	go func(writer *Writer) {
+
+		defer writer.waitGroup.Done()
+
+		for row := range writer.events {
+
+			store, err := writer.storePool.GetEngine(getPath(workingDirectory, row), true)
+
+			if err != nil {
+
+				log.Printf("writer.runWriter : Error getting store: %v", err)
+
+				continue
+			}
+
+			//writer.data = writer.data[:0]
+
+			lastIndex, err := encodeData(row, &writer.data)
+
+			if err != nil {
+
+				log.Printf("writer.runWriter : failed to encode data: %s", err)
+
+				continue
+			}
+
+			err = store.Put(row.ObjectId, writer.data[:lastIndex])
+
+			if err != nil {
+
+				log.Printf("writer.runWriter : failed to write data: %s", err)
+
+				continue
+			}
+
+		}
+
+		return
+
+	}(writer)
+}
+
+func ShutdownWriters(writers []*Writer) {
+
+	for _, writer := range writers {
+
+		close(writer.events)
+
+		writer.waitGroup.Wait()
+	}
 }

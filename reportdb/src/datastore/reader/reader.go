@@ -2,43 +2,283 @@ package reader
 
 import (
 	"fmt"
-	"reportdb/src/storage/engine"
+	"log"
+	. "reportdb/storage"
+	. "reportdb/utils"
+	"strconv"
+	"sync"
 	"time"
 )
 
-func FetchData(counterID uint16, objectID uint32, from uint32, to uint32) ([]interface{}, error) {
+type Reader struct {
+	id uint8
 
-	fromTime := time.Unix(int64(from), 0)
+	dayPool chan struct{} // to read multiple day in parallel for query
 
-	toTime := time.Unix(int64(to), 0)
+	queryEvents chan QueryReceive // channel to take query from query distributor
 
-	fromTime = time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(), 0, 0, 0, 0, fromTime.Location())
+	resultChannel chan Response // channel to send query result
 
-	toTime = time.Date(toTime.Year(), toTime.Month(), toTime.Day(), 0, 0, 0, 0, toTime.Location())
+	storePool *StorePool
 
-	var results []interface{}
+	waitGroup *sync.WaitGroup // to wait completion of all reader
+
+	dayResultMapping map[string]map[uint32][]DataPoint // keep day-result mapping for caching counter_id-object_id
+
+	results map[uint32][]DataPoint // result of query
+
+	lock *sync.RWMutex
+}
+
+type DataPoint struct {
+	Timestamp uint32 `json:"timestamp"`
+
+	Value interface{} `json:"value"`
+}
+
+func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
+
+	readers, err := initializeReaders(storePool, resultChannel)
+
+	if err != nil {
+
+		return readers, fmt.Errorf("startReaders : Error initializing readers: %v", err)
+	}
+
+	for _, reader := range readers {
+
+		reader.runReader()
+	}
+
+	return readers, nil
+}
+
+func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
+
+	readers := make([]*Reader, GetReaders())
+
+	for i := range readers {
+
+		readers[i] = &Reader{
+
+			id: uint8(i),
+
+			dayPool: make(chan struct{}, GetDayWorkers()),
+
+			queryEvents: make(chan QueryReceive, GetQueryBuffer()),
+
+			resultChannel: resultChannel,
+
+			storePool: storePool,
+
+			waitGroup: &sync.WaitGroup{},
+
+			dayResultMapping: make(map[string]map[uint32][]DataPoint),
+
+			results: make(map[uint32][]DataPoint),
+
+			lock: &sync.RWMutex{},
+		}
+
+		for j := 0; j < GetDayWorkers(); j++ {
+
+			readers[i].dayPool <- struct{}{}
+		}
+	}
+
+	return readers, nil
+}
+
+func (reader *Reader) runReader() {
+
+	reader.waitGroup.Add(1)
+
+	go func() {
+
+		defer reader.waitGroup.Done()
+
+		for query := range reader.queryEvents {
+
+			results, err := reader.FetchData(query.Query)
+
+			if err != nil {
+
+				log.Printf("Error fetching data from reader: %v", err)
+
+				response := Response{
+
+					RequestID: query.RequestID,
+
+					Error: err.Error(),
+				}
+
+				reader.resultChannel <- response
+			}
+
+			parseResult, err := ParseResult(results, query.Query)
+
+			var response Response
+
+			if err != nil {
+
+				response = Response{
+
+					RequestID: query.RequestID,
+
+					Error: err.Error(),
+				}
+
+			} else {
+
+				response = Response{
+
+					RequestID: query.RequestID,
+
+					Data: parseResult,
+				}
+			}
+
+			reader.resultChannel <- response
+		}
+
+	}()
+}
+
+func ShutdownReaders(readers []*Reader) {
+
+	for _, reader := range readers {
+
+		close(reader.queryEvents)
+
+		reader.waitGroup.Wait()
+	}
+
+}
+
+func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
+
+	dataType, err := GetCounterType(query.CounterID)
+
+	if err != nil {
+
+		return nil, fmt.Errorf("reader.fetchData error : %v", err)
+	}
+
+	fromTime := time.Unix(int64(query.From), 0).Truncate(24 * time.Hour).UTC()
+
+	toTime := time.Unix(int64(query.To), 0).Truncate(24 * time.Hour).UTC()
+
+	workingDirectory := GetWorkingDirectory()
+
+	wg := &sync.WaitGroup{}
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
-		dayResults, err, skip := engine.Get(counterID, objectID, from, to, current)
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
 
-		if skip == true && dayResults == nil {
+		for _, ObjectId := range query.ObjectIDs {
 
-			continue
+			reader.lock.RLock()
+
+			if _, exists := reader.dayResultMapping[path][ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
+
+				continue
+			}
+
+			reader.lock.RUnlock()
+
+			<-reader.dayPool
+
+			wg.Add(1)
+
+			go func(path string) {
+
+				defer func() {
+
+					wg.Done()
+
+					reader.dayPool <- struct{}{}
+				}()
+
+				store, err := reader.storePool.GetEngine(path, false)
+
+				if err != nil {
+
+					log.Printf("reader.fetchData error : %v", err)
+
+					return
+				}
+
+				dayResult, err := store.Get(ObjectId, query.From, query.To)
+
+				if err != nil {
+
+					log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
+
+					return
+
+				}
+
+				var decodeDayResult []DataPoint
+
+				decodeData(dayResult, dataType, &decodeDayResult)
+
+				reader.lock.Lock()
+
+				objectsMap, exists := reader.dayResultMapping[path]
+
+				if !exists {
+
+					objectsMap = make(map[uint32][]DataPoint)
+
+					reader.dayResultMapping[path] = objectsMap
+				}
+
+				reader.dayResultMapping[path][ObjectId] = decodeDayResult
+
+				reader.lock.Unlock()
+
+				return
+
+			}(path)
+
 		}
 
-		if err != nil {
+	}
 
-			return nil, fmt.Errorf("failed to fetch data for %s: %v", current.Format("2006-01-02"), err)
+	wg.Wait()
+
+	reader.lock.Lock()
+
+	reader.results = make(map[uint32][]DataPoint)
+
+	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
+
+		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
+
+		for _, ObjectId := range query.ObjectIDs {
+
+			if data, exists := reader.dayResultMapping[path][ObjectId]; exists {
+
+				if len(data) > 0 {
+
+					reader.results[ObjectId] = data
+				}
+
+				if !current.After(fromTime) || !current.Before(toTime) {
+
+					delete(reader.dayResultMapping[path], ObjectId)
+				}
+			}
 		}
-
-		results = append(results, dayResults...)
 	}
 
-	if len(results) == 0 {
+	reader.lock.Unlock()
 
-		return nil, fmt.Errorf("no data found in time range %d-%d", from, to)
+	if len(reader.results) == 0 {
+
+		return nil, fmt.Errorf("no data found in time range %d-%d", query.From, query.To)
 	}
 
-	return results, nil
+	return reader.results, nil
 }

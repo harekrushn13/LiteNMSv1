@@ -1,0 +1,17 @@
+{
+  "1": {
+    "name": "qwe.asd.abc",
+    "type": "uint64",
+    "polling": 1
+  },
+  "2": {
+    "name": "qwe.asd.pqr",
+    "type": "float64",
+    "polling": 2
+  },
+  "3": {
+    "name": "qwe.asd.xyz",
+    "type": "string",
+    "polling": 5
+  }
+}
