@@ -3,7 +3,7 @@ package utils
 type QueryRequest struct {
 	CounterID uint16 `json:"counter_id" binding:"required"`
 
-	ObjectIDs []uint32 `json:"object_ids,omitempty" binding:"required"`
+	ObjectIDs []uint32 `json:"object_ids,omitempty"`
 
 	From uint32 `json:"from" binding:"required"`
 

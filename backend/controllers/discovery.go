@@ -228,6 +228,8 @@ func (controller *DiscoveryController) StartDiscovery(c *gin.Context) {
 
 		"discovered_devices": discoveredDevices,
 
+		"discovered_devices_count": len(discoveredDevices),
+
 		"message": "Discovery completed successfully",
 	})
 

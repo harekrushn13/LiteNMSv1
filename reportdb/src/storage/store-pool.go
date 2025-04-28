@@ -116,7 +116,7 @@ func (storePool *StorePool) flushAllEngines() {
 
 	for _, engine := range storePool.storePool {
 
-		if engine.isUsedPut == true && currentTime-engine.lastSave >= 5 {
+		if engine.isUsedPut == true && currentTime-engine.lastSave >= int64(GetSaveIndexInterval()) {
 
 			engine.lastSave = currentTime
 
@@ -149,10 +149,11 @@ func (storePool *StorePool) Shutdown() {
 				log.Printf("storePool.SaveEngine error: %s\n", err)
 			}
 		}
+
+		engine.fileManager.Close()
 	}
 
 	storePool.lock.Unlock()
-
 }
 
 func (storePool *StorePool) CheckEngineUsedPut(day string) bool {
