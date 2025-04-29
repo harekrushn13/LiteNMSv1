@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"context"
 	"fmt"
 	"log"
 	. "reportdb/storage"
@@ -113,6 +114,8 @@ func (reader *Reader) runReader() {
 				}
 
 				reader.resultChannel <- response
+
+				continue
 			}
 
 			parseResult, err := ParseResult(results, query.Query)
@@ -157,6 +160,10 @@ func ShutdownReaders(readers []*Reader) {
 
 func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+
+	defer cancel()
+
 	dataType, err := GetCounterType(query.CounterID)
 
 	if err != nil {
@@ -181,77 +188,109 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
 
+		store, err := reader.storePool.GetEngine(path, false)
+
+		if err != nil {
+
+			log.Printf("reader.fetchData error : %v", err)
+
+			continue
+		}
+
 		for _, ObjectId := range query.ObjectIDs {
 
 			reader.lock.RLock()
 
 			if _, exists := reader.dayResultMapping[path][ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
 
+				reader.lock.RUnlock()
+
 				continue
 			}
 
 			reader.lock.RUnlock()
 
-			<-reader.dayPool
+			select {
 
-			wg.Add(1)
+			case <-ctx.Done():
 
-			go func(path string) {
+				break
 
-				defer func() {
+			case <-reader.dayPool:
 
-					wg.Done()
+				wg.Add(1)
 
-					reader.dayPool <- struct{}{}
-				}()
+				go func(path string, ObjectId uint32) {
 
-				store, err := reader.storePool.GetEngine(path, false)
+					defer func() {
 
-				if err != nil {
+						wg.Done()
 
-					log.Printf("reader.fetchData error : %v", err)
+						reader.dayPool <- struct{}{}
+					}()
 
-					return
-				}
+					select {
 
-				dayResult, err := store.Get(ObjectId, query.From, query.To)
+					case <-ctx.Done():
 
-				if err != nil {
+						return
 
-					log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
+					default:
+					}
 
-					return
+					dayResult, err := store.Get(ObjectId, query.From, query.To)
 
-				}
+					if err != nil {
 
-				var decodeDayResult []DataPoint
+						log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
 
-				decodeData(dayResult, dataType, &decodeDayResult)
+						return
 
-				reader.lock.Lock()
+					}
 
-				objectsMap, exists := reader.dayResultMapping[path]
+					var decodeDayResult []DataPoint
 
-				if !exists {
+					decodeData(dayResult, dataType, &decodeDayResult)
 
-					objectsMap = make(map[uint32][]DataPoint)
+					reader.lock.Lock()
 
-					reader.dayResultMapping[path] = objectsMap
-				}
+					objectsMap, exists := reader.dayResultMapping[path]
 
-				reader.dayResultMapping[path][ObjectId] = decodeDayResult
+					if !exists {
 
-				reader.lock.Unlock()
+						objectsMap = make(map[uint32][]DataPoint)
 
-				return
+						reader.dayResultMapping[path] = objectsMap
+					}
 
-			}(path)
+					reader.dayResultMapping[path][ObjectId] = decodeDayResult
+
+					reader.lock.Unlock()
+
+				}(path, ObjectId)
+			}
 
 		}
 
 	}
 
-	wg.Wait()
+	done := make(chan struct{})
+
+	go func() {
+
+		wg.Wait()
+
+		close(done)
+	}()
+
+	select {
+
+	case <-done:
+
+	case <-ctx.Done():
+
+		return nil, fmt.Errorf("query Timeout")
+	}
 
 	reader.lock.Lock()
 
