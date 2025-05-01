@@ -53,16 +53,6 @@ var (
 	workingDir string
 )
 
-type Events struct {
-	ObjectId uint32
-
-	CounterId uint16
-
-	Timestamp uint32
-
-	Value interface{}
-}
-
 func InitConfig() error {
 
 	currentPath, err := os.Getwd()

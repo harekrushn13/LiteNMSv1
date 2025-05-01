@@ -1,10 +1,11 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
-	"log"
+	"github.com/vmihailenco/msgpack/v5"
+	"go.uber.org/zap"
+	. "poller/logger"
 	. "poller/utils"
 )
 
@@ -111,16 +112,16 @@ func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
 
 			if err != nil {
 
-				log.Printf("pollingReceiver : Error receiving query: %v", err)
+				Logger.Warn("pollingReceiver:Error receiving query", zap.Error(err))
 
 				continue
 			}
 
 			var devices []Device
 
-			if err := json.Unmarshal(msg, &devices); err != nil {
+			if err := msgpack.Unmarshal(msg, &devices); err != nil {
 
-				log.Printf("pollingReceiver : Error unmarshaling query: %v", err)
+				Logger.Warn("pollingReceiver: Error unmarshalling query", zap.Error(err))
 
 				continue
 			}
@@ -150,18 +151,18 @@ func (server *PollingServer) pollingSender(dataChannel chan []Events) {
 
 			fmt.Println("sent : ", len(events))
 
-			jsonData, err := json.Marshal(events)
+			data, err := msgpack.Marshal(events)
 
 			if err != nil {
 
-				log.Printf("pollingSender : Error marshaling response: %v", err)
+				Logger.Error("pollingSender: Error marshaling response", zap.Error(err))
 
 				continue
 			}
 
-			if _, err := server.pushSocket.SendBytes(jsonData, 0); err != nil {
+			if _, err = server.pushSocket.SendBytes(data, 0); err != nil {
 
-				log.Printf("pollingSender : Error sending response: %v", err)
+				Logger.Error("pollingSender: Error sending response", zap.Error(err))
 
 				continue
 			}

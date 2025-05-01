@@ -1,19 +1,19 @@
 package utils
 
 type QueryRequest struct {
-	CounterID uint16 `json:"counter_id" binding:"required"`
+	CounterID uint16 `msgpack:"counter_id" json:"counter_id" binding:"required"`
 
-	ObjectIDs []uint32 `json:"object_ids,omitempty"`
+	ObjectIDs []uint32 `msgpack:"object_ids" json:"object_ids,omitempty"`
 
-	From uint32 `json:"from" binding:"required"`
+	From uint32 `msgpack:"from" json:"from" binding:"required"`
 
-	To uint32 `json:"to" binding:"required"`
+	To uint32 `msgpack:"to" json:"to" binding:"required"`
 
-	Aggregation string `json:"aggregation,omitempty" binding:"required"`
+	Aggregation string `msgpack:"aggregation" json:"aggregation,omitempty" binding:"required"`
 
-	GroupByObjects bool `json:"group_by_objects,omitempty"`
+	GroupByObjects bool `msgpack:"group_by_objects" json:"group_by_objects,omitempty"`
 
-	Interval int `json:"interval,omitempty"`
+	Interval int `msgpack:"interval" json:"interval,omitempty"`
 }
 
 type QueryMap struct {
@@ -25,17 +25,17 @@ type QueryMap struct {
 }
 
 type QuerySend struct {
-	RequestID uint64 `json:"request_id"`
+	RequestID uint64 `msgpack:"request_id" json:"request_id"`
 
-	QueryRequest QueryRequest `json:"query_request"`
+	QueryRequest QueryRequest `msgpack:"query_request" json:"query_request"`
 }
 
 type Response struct {
-	RequestID uint64 `json:"request_id"`
+	RequestID uint64 `msgpack:"request_id" json:"request_id"`
 
-	Data interface{} `json:"data"`
+	Error string `msgpack:"error,omitempty" json:"error,omitempty"`
 
-	Error string `json:"error,omitempty"`
+	Data interface{} `msgpack:"data" json:"data"`
 }
 
 type DataPoint struct {

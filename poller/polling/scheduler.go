@@ -3,8 +3,9 @@ package polling
 import (
 	"container/heap"
 	"fmt"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
-	"log"
+	. "poller/logger"
 	. "poller/utils"
 	"strings"
 	"sync"
@@ -110,8 +111,11 @@ func (poller *Poller) pollCounter(counterID uint16, eventChannel chan Events, po
 
 			if err != nil {
 
-				log.Printf("pollCounter: Error polling device %s (ObjectID: %d) for counter %d: %v\n",
-					device.IP, device.ObjectID, counterID, err)
+				Logger.Warn("Error polling device",
+					zap.String("ip", device.IP),
+					zap.Uint32("objectID", device.ObjectID),
+					zap.Uint16("counterID", counterID),
+					zap.Error(err))
 
 				return
 			}

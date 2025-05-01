@@ -1,11 +1,13 @@
 package server
 
 import (
+	. "backend/logger"
 	. "backend/utils"
 	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
-	"log"
+	"github.com/vmihailenco/msgpack/v5"
+	"go.uber.org/zap"
 )
 
 type QueryServer struct {
@@ -114,18 +116,18 @@ func (server *QueryServer) querySender(queryChannel chan QueryMap, queryMapping 
 				QueryRequest: queryMap.QueryRequest,
 			}
 
-			queryBytes, err := json.Marshal(querySend)
+			queryBytes, err := msgpack.Marshal(querySend)
 
 			if err != nil {
 
-				log.Printf("querySender: failed to marshal query: %v", err)
+				Logger.Warn("querySender: failed to marshal query", zap.Error(err))
 
 				continue
 			}
 
 			if _, err := server.pushSocket.SendBytes(queryBytes, 0); err != nil {
 
-				log.Printf("querySender: failed to send query: %v", err)
+				Logger.Warn("querySender: failed to send query", zap.Error(err))
 
 				continue
 			}
@@ -155,7 +157,7 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 
 			if err != nil {
 
-				log.Printf("responseReceiver: Error receiving response: %v", err)
+				Logger.Warn("responseReceiver: Error receiving response", zap.Error(err))
 
 				continue
 			}
@@ -164,7 +166,7 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 
 			if err := json.Unmarshal(data, &response); err != nil {
 
-				log.Printf("responseReceiver: Error unmarshaling response: %v", err)
+				Logger.Warn("responseReceiver: Error unmarshalling response", zap.Error(err))
 
 				continue
 			}

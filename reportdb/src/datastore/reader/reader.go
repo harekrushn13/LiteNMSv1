@@ -177,11 +177,6 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 	workingDirectory := GetWorkingDirectory()
 
-	if query.ObjectIDs == nil || len(query.ObjectIDs) == 0 {
-
-		query.ObjectIDs = getObjectIDs(fromTime, toTime)
-	}
-
 	wg := &sync.WaitGroup{}
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {

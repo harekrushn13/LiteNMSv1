@@ -1,9 +1,10 @@
 package server
 
 import (
+	. "backend/logger"
 	"fmt"
 	"github.com/pebbe/zmq4"
-	"log"
+	"go.uber.org/zap"
 )
 
 type DBServer struct {
@@ -75,7 +76,7 @@ func (server *DBServer) dbSender(dataChannel chan []byte) {
 
 			if _, err := server.pushSocket.SendBytes(data, 0); err != nil {
 
-				log.Printf("pollingSender : Error sending response: %v", err)
+				Logger.Warn("dbSender : Error sending data", zap.Error(err))
 
 				continue
 			}

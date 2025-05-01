@@ -62,11 +62,11 @@ func (a *CredentialIDArray) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, a)
 }
 
-func (a CredentialIDArray) Value() (driver.Value, error) {
+func (a *CredentialIDArray) Value() (driver.Value, error) {
 
-	intArray := make(pq.Int64Array, len(a))
+	intArray := make(pq.Int64Array, len(*a))
 
-	for i, v := range a {
+	for i, v := range *a {
 
 		intArray[i] = int64(v)
 	}

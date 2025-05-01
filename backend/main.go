@@ -1,6 +1,7 @@
 package main
 
 import (
+	. "backend/logger"
 	. "backend/models"
 	. "backend/routes"
 	. "backend/server"
@@ -8,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
 	"os"
@@ -18,13 +20,22 @@ import (
 
 func main() {
 
+	if err := InitLogger(); err != nil {
+
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+
+		return
+	}
+
+	defer Logger.Sync()
+
 	signalChannel := make(chan os.Signal, 1)
 
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	if err := InitDB(); err != nil {
 
-		log.Printf("Failed to initialize database: %v", err)
+		Logger.Error("Failed to initialize database", zap.Error(err))
 
 		return
 	}
@@ -33,7 +44,7 @@ func main() {
 
 	if err := InitConfig(); err != nil {
 
-		log.Printf("Failed to initialize config: %v", err)
+		Logger.Error("Failed to initialize config", zap.Error(err))
 
 		return
 	}
@@ -52,7 +63,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Failed to initialize polling server: %v", err)
+		Logger.Error("Failed to initialize polling server", zap.Error(err))
 
 		pollingServer.Shutdown()
 
@@ -63,7 +74,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Failed to initialize database server: %v", err)
+		Logger.Error("Failed to initialize database server", zap.Error(err))
 
 		pollingServer.Shutdown()
 
@@ -76,7 +87,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Failed to initialize query client: %v", err)
+		Logger.Error("Failed to initialize query client", zap.Error(err))
 
 		queryServer.Shutdown()
 
@@ -97,9 +108,10 @@ func main() {
 
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 
-			log.Printf("Failed to start server: %v", err)
+			Logger.Error("Failed to start server", zap.Error(err))
 
 		}
+
 	}()
 
 	<-signalChannel
@@ -115,11 +127,13 @@ func main() {
 		log.Printf("Server shutdown failed: %v", err)
 	}
 
+	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
+
 	pollingServer.Shutdown()
 
 	dbServer.Shutdown()
 
 	queryServer.Shutdown()
 
-	fmt.Println("\nshutdown", time.Now())
+	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
 }

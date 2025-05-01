@@ -1,9 +1,9 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
+	"github.com/vmihailenco/msgpack/v5"
 	"log"
 	. "reportdb/utils"
 )
@@ -84,7 +84,7 @@ func (server *PollingServer) pollingReceiver(dataChannel chan []Events) {
 
 			var events []Events
 
-			err = json.Unmarshal(batchData, &events)
+			err = msgpack.Unmarshal(batchData, &events)
 
 			if err != nil {
 

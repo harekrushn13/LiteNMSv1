@@ -1,11 +1,12 @@
 package server
 
 import (
+	. "backend/logger"
 	. "backend/utils"
-	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
-	"log"
+	"github.com/vmihailenco/msgpack/v5"
+	"go.uber.org/zap"
 )
 
 type PollingServer struct {
@@ -109,7 +110,7 @@ func (server *PollingServer) pollingReceiver(dataChannel chan []byte) {
 
 			if err != nil {
 
-				log.Printf("pollingReceiver : Error receiving query: %v", err)
+				Logger.Warn("pollingReceiver:Error receiving data", zap.Error(err))
 
 				continue
 			}
@@ -137,18 +138,18 @@ func (server *PollingServer) pollingSender(deviceChannel chan []PollerDevice) {
 
 		case pollerDevices := <-deviceChannel:
 
-			jsonData, err := json.Marshal(pollerDevices)
+			data, err := msgpack.Marshal(pollerDevices)
 
 			if err != nil {
 
-				log.Printf("pollingSender : Error marshaling response: %v", err)
+				Logger.Warn("pollingSender: Error marshaling data", zap.Error(err))
 
 				continue
 			}
 
-			if _, err := server.pushSocket.SendBytes(jsonData, 0); err != nil {
+			if _, err := server.pushSocket.SendBytes(data, 0); err != nil {
 
-				log.Printf("pollingSender : Error sending response: %v", err)
+				Logger.Warn("pollingSender : Error sending data", zap.Error(err))
 
 				continue
 			}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
+	"github.com/vmihailenco/msgpack/v5"
 	"log"
 	. "reportdb/utils"
 )
@@ -118,7 +119,7 @@ func (queryServer *QueryServer) queryReceiver(queryChannel chan QueryReceive) {
 
 			var query QueryReceive
 
-			if err := json.Unmarshal(msg, &query); err != nil {
+			if err := msgpack.Unmarshal(msg, &query); err != nil {
 
 				log.Printf("queryReceiver : Error unmarshaling query: %v", err)
 

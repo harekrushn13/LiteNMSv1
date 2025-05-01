@@ -29,7 +29,7 @@ func encodeData(row Events, data *[]byte) (uint8, error) {
 
 	case TypeUint64:
 
-		val, ok := row.Value.(float64)
+		val, ok := row.Value.(uint64)
 
 		if !ok {
 

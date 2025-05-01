@@ -1,8 +1,8 @@
 package storage
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/vmihailenco/msgpack/v5"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,13 +18,13 @@ type IndexManager struct {
 }
 
 type IndexEntry struct {
-	BlockStart int64 `json:"blockStart"`
+	BlockStart int64 `msgpack:"blockStart"`
 
-	BlockEnd int64 `json:"blockEnd"`
+	BlockEnd int64 `msgpack:"blockEnd"`
 
-	EntryStart int64 `json:"entryStart"`
+	EntryStart int64 `msgpack:"entryStart"`
 
-	EntryEnd int64 `json:"entryEnd"`
+	EntryEnd int64 `msgpack:"entryEnd"`
 }
 
 func NewIndexManager(baseDir string) *IndexManager {
@@ -69,7 +69,7 @@ func (indexManager *IndexManager) GetIndexMapEntryList(key uint32, indexId uint8
 
 		indexManager.indexHandles[indexId] = indexMap
 
-		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".json"
+		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".msg"
 
 		if err := loadIndexFile(indexFilePath, &indexMap); err != nil {
 
@@ -103,7 +103,7 @@ func loadIndexFile(indexFilePath string, indexMap *map[uint32][]*IndexEntry) err
 		return fmt.Errorf("error reading index file: %v", err)
 	}
 
-	if err := json.Unmarshal(data, indexMap); err != nil {
+	if err := msgpack.Unmarshal(data, indexMap); err != nil {
 
 		return fmt.Errorf("error parsing index map: %v", err)
 	}
@@ -129,14 +129,14 @@ func (indexManager *IndexManager) Save() error {
 
 	for index, indexMap := range indexManager.indexHandles {
 
-		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(index)) + ".json"
+		indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(index)) + ".msg"
 
 		if err := os.MkdirAll(filepath.Dir(indexFilePath), 0755); err != nil {
 
 			return err
 		}
 
-		data, err := json.MarshalIndent(indexMap, "", "  ")
+		data, err := msgpack.Marshal(indexMap)
 
 		if err != nil {
 
