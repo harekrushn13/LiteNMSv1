@@ -12,13 +12,13 @@ func InitLogger() error {
 
 	consoleEncoderConfig := zap.NewDevelopmentEncoderConfig()
 
-	consoleEncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
+	consoleEncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
 
 	fileEncoderConfig := zap.NewProductionEncoderConfig()
 
-	fileEncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
+	fileEncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	fileEncoder := zapcore.NewJSONEncoder(fileEncoderConfig)
 
