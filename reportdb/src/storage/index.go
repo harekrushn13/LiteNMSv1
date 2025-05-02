@@ -5,6 +5,7 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 	"os"
 	"path/filepath"
+	. "reportdb/utils"
 	"strconv"
 	"sync"
 )
@@ -151,4 +152,47 @@ func (indexManager *IndexManager) Save() error {
 	}
 
 	return nil
+}
+
+func (indexManager *IndexManager) GetAllKeys() ([]uint32, error) {
+
+	var allKeys []uint32
+
+	indexManager.lock.RLock()
+
+	defer indexManager.lock.RUnlock()
+
+	if len(indexManager.indexHandles) == 0 {
+
+		indexManager.indexHandles = make(map[uint8]map[uint32][]*IndexEntry)
+
+		partitions := GetPartitions()
+
+		for i := 0; i < partitions; i++ {
+
+			indexManager.indexHandles[uint8(i)] = make(map[uint32][]*IndexEntry)
+		}
+	}
+
+	for indexId, indexMap := range indexManager.indexHandles {
+
+		if len(indexMap) == 0 {
+
+			indexFilePath := indexManager.baseDir + "/index_" + strconv.Itoa(int(indexId)) + ".msg"
+
+			if err := loadIndexFile(indexFilePath, &indexMap); err != nil {
+
+				return nil, fmt.Errorf("error loading index file for indexId %d: %v", indexId, err)
+			}
+
+			indexManager.indexHandles[indexId] = indexMap
+		}
+
+		for key := range indexMap {
+
+			allKeys = append(allKeys, key)
+		}
+	}
+
+	return allKeys, nil
 }

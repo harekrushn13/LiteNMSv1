@@ -12,13 +12,13 @@ func InitLogger() error {
 
 	consoleEncoderConfig := zap.NewDevelopmentEncoderConfig()
 
-	consoleEncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
+	consoleEncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
 
 	fileEncoderConfig := zap.NewProductionEncoderConfig()
 
-	fileEncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
+	fileEncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	fileEncoder := zapcore.NewJSONEncoder(fileEncoderConfig)
 
@@ -32,7 +32,7 @@ func InitLogger() error {
 		return lvl != zapcore.InfoLevel
 	})
 
-	file, err := os.OpenFile("poller_errors.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile("reportdb_errors.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	if err != nil {
 

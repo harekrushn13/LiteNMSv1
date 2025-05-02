@@ -130,6 +130,11 @@ func (store *StoreEngine) Get(key uint32, from uint32, to uint32) ([][]byte, err
 
 }
 
+func (store *StoreEngine) GetKeys() ([]uint32, error) {
+
+	return store.indexManager.GetAllKeys()
+}
+
 func getPartitionId(key uint32) (uint8, error) {
 
 	partitions := uint8(GetPartitions())

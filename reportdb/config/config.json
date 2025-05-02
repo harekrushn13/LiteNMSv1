@@ -6,7 +6,7 @@
   "responseBuffer": 20,
   "eventsBuffer": 1000,
   "queryBuffer": 10,
-  "dayWorkers": 10,
+  "dayWorkers": 25,
   "fileGrowthSize": 4096,
   "saveIndexInterval": 6
 }

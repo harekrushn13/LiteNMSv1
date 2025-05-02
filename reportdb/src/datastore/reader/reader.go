@@ -1,14 +1,12 @@
 package reader
 
 import (
-	"context"
 	"fmt"
-	"log"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/storage"
 	. "reportdb/utils"
-	"strconv"
 	"sync"
-	"time"
 )
 
 type Reader struct {
@@ -104,7 +102,7 @@ func (reader *Reader) runReader() {
 
 			if err != nil {
 
-				log.Printf("Error fetching data from reader: %v", err)
+				Logger.Error("Error fetching data from reader", zap.Error(err))
 
 				response := Response{
 
@@ -156,168 +154,4 @@ func ShutdownReaders(readers []*Reader) {
 		reader.waitGroup.Wait()
 	}
 
-}
-
-func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-
-	defer cancel()
-
-	dataType, err := GetCounterType(query.CounterID)
-
-	if err != nil {
-
-		return nil, fmt.Errorf("reader.fetchData error : %v", err)
-	}
-
-	fromTime := time.Unix(int64(query.From), 0).Truncate(24 * time.Hour).UTC()
-
-	toTime := time.Unix(int64(query.To), 0).Truncate(24 * time.Hour).UTC()
-
-	workingDirectory := GetWorkingDirectory()
-
-	wg := &sync.WaitGroup{}
-
-	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
-
-		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
-
-		store, err := reader.storePool.GetEngine(path, false)
-
-		if err != nil {
-
-			log.Printf("reader.fetchData error : %v", err)
-
-			continue
-		}
-
-		for _, ObjectId := range query.ObjectIDs {
-
-			reader.lock.RLock()
-
-			if _, exists := reader.dayResultMapping[path][ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
-
-				reader.lock.RUnlock()
-
-				continue
-			}
-
-			reader.lock.RUnlock()
-
-			select {
-
-			case <-ctx.Done():
-
-				break
-
-			case <-reader.dayPool:
-
-				wg.Add(1)
-
-				go func(path string, ObjectId uint32) {
-
-					defer func() {
-
-						wg.Done()
-
-						reader.dayPool <- struct{}{}
-					}()
-
-					select {
-
-					case <-ctx.Done():
-
-						return
-
-					default:
-					}
-
-					dayResult, err := store.Get(ObjectId, query.From, query.To)
-
-					if err != nil {
-
-						log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
-
-						return
-
-					}
-
-					var decodeDayResult []DataPoint
-
-					decodeData(dayResult, dataType, &decodeDayResult)
-
-					reader.lock.Lock()
-
-					objectsMap, exists := reader.dayResultMapping[path]
-
-					if !exists {
-
-						objectsMap = make(map[uint32][]DataPoint)
-
-						reader.dayResultMapping[path] = objectsMap
-					}
-
-					reader.dayResultMapping[path][ObjectId] = decodeDayResult
-
-					reader.lock.Unlock()
-
-				}(path, ObjectId)
-			}
-
-		}
-
-	}
-
-	done := make(chan struct{})
-
-	go func() {
-
-		wg.Wait()
-
-		close(done)
-	}()
-
-	select {
-
-	case <-done:
-
-	case <-ctx.Done():
-
-		return nil, fmt.Errorf("query Timeout")
-	}
-
-	reader.lock.Lock()
-
-	reader.results = make(map[uint32][]DataPoint)
-
-	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
-
-		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
-
-		for _, ObjectId := range query.ObjectIDs {
-
-			if data, exists := reader.dayResultMapping[path][ObjectId]; exists {
-
-				if len(data) > 0 {
-
-					reader.results[ObjectId] = data
-				}
-
-				if !current.After(fromTime) || !current.Before(toTime) {
-
-					delete(reader.dayResultMapping[path], ObjectId)
-				}
-			}
-		}
-	}
-
-	reader.lock.Unlock()
-
-	if len(reader.results) == 0 {
-
-		return nil, fmt.Errorf("no data found in time range %d-%d", query.From, query.To)
-	}
-
-	return reader.results, nil
 }
