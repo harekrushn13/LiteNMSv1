@@ -1,7 +1,8 @@
 package writer
 
 import (
-	"log"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/utils"
 )
 
@@ -21,7 +22,12 @@ func DistributeData(dataChannel chan []Events, writers []*Writer) {
 
 				if index >= numWriters || index < 0 {
 
-					log.Printf("distributeData error : Writer index is out of range")
+					Logger.Warn("DistributeData: writer index out of range",
+						zap.Uint8("index", index),
+						zap.Uint8("numWriters", numWriters),
+						zap.Uint16("CounterId", row.CounterId),
+						zap.Uint32("ObjectId", row.ObjectId),
+					)
 
 					continue
 				}

@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"github.com/pebbe/zmq4"
 	"github.com/vmihailenco/msgpack/v5"
-	"log"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/utils"
 )
 
@@ -77,7 +78,7 @@ func (server *PollingServer) pollingReceiver(dataChannel chan []Events) {
 
 			if err != nil {
 
-				log.Printf("pollingReceiver : Error receiving query: %v", err)
+				Logger.Warn("pollingReceiver : Error receiving batchData", zap.Error(err))
 
 				continue
 			}
@@ -88,12 +89,14 @@ func (server *PollingServer) pollingReceiver(dataChannel chan []Events) {
 
 			if err != nil {
 
-				log.Printf("pollingReceiver : Error unmarshalling message: %v", err)
+				Logger.Warn("pollingReceiver : Error unmarshalling batchData", zap.Error(err))
 
 				continue
 			}
 
-			fmt.Println("received : ", len(events))
+			Logger.Info("PollingServer: received events",
+				zap.Int("count", len(events)),
+			)
 
 			dataChannel <- events
 		}

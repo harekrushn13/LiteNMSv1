@@ -2,8 +2,9 @@ package storage
 
 import (
 	"fmt"
-	"log"
+	"go.uber.org/zap"
 	"os"
+	. "reportdb/logger"
 	. "reportdb/utils"
 	"sync"
 	"time"
@@ -124,7 +125,7 @@ func (storePool *StorePool) flushAllEngines() {
 
 			if err != nil {
 
-				log.Printf("storePool.SaveEngine error: %s\n", err)
+				Logger.Error("Failed to save index for engine", zap.String("path", engine.baseDir), zap.Error(err))
 			}
 		}
 	}
@@ -146,7 +147,7 @@ func (storePool *StorePool) Shutdown() {
 
 			if err := engine.indexManager.Save(); err != nil {
 
-				log.Printf("storePool.SaveEngine error: %s\n", err)
+				Logger.Error("Failed to save index for engine", zap.String("path", engine.baseDir), zap.Error(err))
 			}
 		}
 

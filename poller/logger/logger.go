@@ -10,16 +10,27 @@ var Logger *zap.Logger
 
 func InitLogger() error {
 
-	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+	consoleEncoderConfig := zap.NewDevelopmentEncoderConfig()
 
-	consoleCore := zapcore.NewCore(
+	consoleEncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
 
-		consoleEncoder,
+	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
 
-		zapcore.AddSync(os.Stdout),
+	fileEncoderConfig := zap.NewProductionEncoderConfig()
 
-		zapcore.InfoLevel,
-	)
+	fileEncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
+
+	fileEncoder := zapcore.NewJSONEncoder(fileEncoderConfig)
+
+	consoleLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+
+		return lvl == zapcore.InfoLevel
+	})
+
+	fileLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+
+		return lvl != zapcore.InfoLevel
+	})
 
 	file, err := os.OpenFile("poller_errors.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
@@ -28,16 +39,9 @@ func InitLogger() error {
 		return err
 	}
 
-	fileEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+	consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), consoleLevel)
 
-	fileCore := zapcore.NewCore(
-
-		fileEncoder,
-
-		zapcore.AddSync(file),
-
-		zapcore.WarnLevel,
-	)
+	fileCore := zapcore.NewCore(fileEncoder, zapcore.AddSync(file), fileLevel)
 
 	core := zapcore.NewTee(consoleCore, fileCore)
 

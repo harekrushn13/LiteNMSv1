@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"github.com/pebbe/zmq4"
 	"github.com/vmihailenco/msgpack/v5"
-	"log"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/utils"
 )
 
@@ -112,7 +113,7 @@ func (queryServer *QueryServer) queryReceiver(queryChannel chan QueryReceive) {
 
 			if err != nil {
 
-				log.Printf("queryReceiver : Error receiving query: %v", err)
+				Logger.Warn("queryReceiver : Error receiving query", zap.Error(err))
 
 				continue
 			}
@@ -121,7 +122,7 @@ func (queryServer *QueryServer) queryReceiver(queryChannel chan QueryReceive) {
 
 			if err := msgpack.Unmarshal(msg, &query); err != nil {
 
-				log.Printf("queryReceiver : Error unmarshaling query: %v", err)
+				Logger.Warn("queryReceiver : Error unmarshalling query", zap.Error(err))
 
 				return
 			}
@@ -153,22 +154,18 @@ func (queryServer *QueryServer) responseSender(resultChannel chan Response) {
 
 			if err != nil {
 
-				log.Printf("responseSender : Error marshaling response: %v", err)
+				Logger.Warn("responseSender : Error marshaling response", zap.Error(err))
 
 				return
 			}
 
 			if _, err := queryServer.pushSocket.SendBytes(responseBytes, 0); err != nil {
 
-				log.Printf("responseSender : Error sending response: %v", err)
+				Logger.Warn("responseSender : Error sending response", zap.Error(err))
 
 				return
 			}
 
-			if response.Error == "" {
-
-				fmt.Println("response given :", response.RequestID)
-			}
 		}
 	}
 }
