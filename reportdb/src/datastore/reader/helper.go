@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"math"
+	. "reportdb/cache"
 	. "reportdb/logger"
 	. "reportdb/storage"
 	. "reportdb/utils"
@@ -51,6 +52,12 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 				return nil, fmt.Errorf("GetKeys : %v", err)
 			}
 
+			reader.lock.Lock()
+
+			reader.objectsMapping[path] = objects
+
+			reader.lock.Unlock()
+
 			reader.fetchForObjectIDs(ctx, wg, path, store, query, dataType, objects)
 
 		} else {
@@ -89,7 +96,7 @@ func (reader *Reader) getStorePathAndEngine(current time.Time, counterID uint16,
 
 	if err != nil {
 
-		Logger.Error("GetEngine failed", zap.Error(err), zap.Uint16("counter_id", counterID))
+		Logger.Info("GetEngine failed", zap.Error(err), zap.Uint16("counter_id", counterID))
 
 		return "", nil, err
 	}
@@ -103,26 +110,16 @@ func (reader *Reader) fetchForObjectIDs(ctx context.Context, wg *sync.WaitGroup,
 
 	if len(objects) > 0 {
 
-		objectIds = objects
+		objectIds = reader.objectsMapping[path]
 
 	} else {
 
 		objectIds = query.ObjectIDs
 	}
 
+	cache := GetCache()
+
 	for _, objectID := range objectIds {
-
-		reader.lock.RLock()
-
-		skip := reader.dayResultMapping[path][objectID] != nil &&
-			!reader.storePool.CheckEngineUsedPut(path)
-
-		reader.lock.RUnlock()
-
-		if skip {
-
-			continue
-		}
 
 		select {
 
@@ -143,6 +140,13 @@ func (reader *Reader) fetchForObjectIDs(ctx context.Context, wg *sync.WaitGroup,
 					reader.dayPool <- struct{}{}
 				}()
 
+				cacheKey := path + "_" + strconv.FormatUint(uint64(objectID), 10)
+
+				if _, found := cache.Get(cacheKey); found && !reader.storePool.CheckEngineUsedPut(path) {
+
+					return
+				}
+
 				result, err := store.Get(objectID, query.From, query.To)
 
 				if err != nil {
@@ -156,16 +160,9 @@ func (reader *Reader) fetchForObjectIDs(ctx context.Context, wg *sync.WaitGroup,
 
 				decodeData(result, dataType, &dp)
 
-				reader.lock.Lock()
+				cache.SetWithTTL(cacheKey, dp, int64(len(dp)*96), 1*time.Hour)
 
-				if _, ok := reader.dayResultMapping[path]; !ok {
-
-					reader.dayResultMapping[path] = make(map[uint32][]DataPoint)
-				}
-
-				reader.dayResultMapping[path][objectID] = dp
-
-				reader.lock.Unlock()
+				cache.Wait()
 
 			}(objectID)
 		}
@@ -197,11 +194,7 @@ func (reader *Reader) waitWithContext(ctx context.Context, wg *sync.WaitGroup) e
 
 func (reader *Reader) mergeResults(query Query, fromTime, toTime time.Time, base string) {
 
-	reader.lock.Lock()
-
-	defer reader.lock.Unlock()
-
-	reader.results = make(map[uint32][]DataPoint)
+	cache := GetCache()
 
 	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
 
@@ -211,9 +204,11 @@ func (reader *Reader) mergeResults(query Query, fromTime, toTime time.Time, base
 
 		if len(query.ObjectIDs) == 0 {
 
-			for id := range reader.dayResultMapping[path] {
+			objectIDs = reader.objectsMapping[path]
 
-				objectIDs = append(objectIDs, id)
+			if reader.storePool.CheckEngineUsedPut(path) {
+
+				delete(reader.objectsMapping, path)
 			}
 
 		} else {
@@ -223,14 +218,16 @@ func (reader *Reader) mergeResults(query Query, fromTime, toTime time.Time, base
 
 		for _, id := range objectIDs {
 
-			if data, ok := reader.dayResultMapping[path][id]; ok && len(data) > 0 {
+			cacheKey := path + "_" + strconv.FormatUint(uint64(id), 10)
 
-				reader.results[id] = data
+			if cached, found := cache.Get(cacheKey); found {
+
+				reader.results[id] = cached
 			}
 
 			if !current.After(fromTime) || !current.Before(toTime) {
 
-				delete(reader.dayResultMapping[path], id)
+				cache.Del(cacheKey)
 			}
 		}
 	}

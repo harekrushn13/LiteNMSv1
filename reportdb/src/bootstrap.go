@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	. "reportdb/cache"
 	. "reportdb/datastore/reader"
 	. "reportdb/datastore/writer"
 	. "reportdb/logger"
@@ -53,6 +54,13 @@ func main() {
 	}
 
 	defer Logger.Sync()
+
+	if err := InitCache(); err != nil {
+
+		Logger.Error("Failed to initialize cache", zap.Error(err))
+
+		return
+	}
 
 	signalChannel := make(chan os.Signal, 1)
 

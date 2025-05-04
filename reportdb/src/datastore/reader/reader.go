@@ -12,7 +12,7 @@ import (
 type Reader struct {
 	id uint8
 
-	dayPool chan struct{} // to read multiple day in parallel for query
+	dayPool chan struct{} // to read multiple day in parallel for a query
 
 	queryEvents chan QueryReceive // channel to take query from query distributor
 
@@ -20,19 +20,13 @@ type Reader struct {
 
 	storePool *StorePool
 
-	waitGroup *sync.WaitGroup // to wait completion of all reader
+	waitGroup *sync.WaitGroup // to wait completion of all readers
 
-	dayResultMapping map[string]map[uint32][]DataPoint // keep day-result mapping for caching counter_id-object_id
+	objectsMapping map[string][]uint32
+
+	lock sync.RWMutex
 
 	results map[uint32][]DataPoint // result of query
-
-	lock *sync.RWMutex
-}
-
-type DataPoint struct {
-	Timestamp uint32 `json:"timestamp"`
-
-	Value interface{} `json:"value"`
 }
 
 func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
@@ -72,11 +66,11 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			waitGroup: &sync.WaitGroup{},
 
-			dayResultMapping: make(map[string]map[uint32][]DataPoint),
+			objectsMapping: make(map[string][]uint32),
+
+			lock: sync.RWMutex{},
 
 			results: make(map[uint32][]DataPoint),
-
-			lock: &sync.RWMutex{},
 		}
 
 		for j := 0; j < GetDayWorkers(); j++ {
@@ -121,6 +115,8 @@ func (reader *Reader) runReader() {
 			var response Response
 
 			if err != nil {
+
+				Logger.Error("Error fetching data from reader", zap.Error(err))
 
 				response = Response{
 

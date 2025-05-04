@@ -10,6 +10,12 @@ type Events struct {
 	Value interface{} `msgpack:"value" json:"value"`
 }
 
+type DataPoint struct {
+	Timestamp uint32 `json:"timestamp"`
+
+	Value interface{} `json:"value"`
+}
+
 type QueryReceive struct {
 	RequestID uint64 `msgpack:"request_id" json:"request_id"`
 
