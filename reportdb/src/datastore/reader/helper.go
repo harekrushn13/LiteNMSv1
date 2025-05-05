@@ -17,7 +17,7 @@ import (
 
 func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 
 	defer cancel()
 
@@ -96,7 +96,7 @@ func (reader *Reader) getStorePathAndEngine(current time.Time, counterID uint16,
 
 	if err != nil {
 
-		Logger.Info("GetEngine failed", zap.Error(err), zap.Uint16("counter_id", counterID))
+		//Logger.Info("GetEngine failed", zap.Error(err), zap.Uint16("counter_id", counterID))
 
 		return "", nil, err
 	}
@@ -222,10 +222,10 @@ func (reader *Reader) mergeResults(query Query, fromTime, toTime time.Time, base
 
 			if cached, found := cache.Get(cacheKey); found {
 
-				reader.results[id] = cached
+				reader.results[id] = append(reader.results[id], cached...)
 			}
 
-			if !current.After(fromTime) || !current.Before(toTime) {
+			if !current.After(fromTime) || !current.Before(toTime) || reader.storePool.CheckEngineUsedPut(path) {
 
 				cache.Del(cacheKey)
 			}

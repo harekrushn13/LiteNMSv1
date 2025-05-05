@@ -45,7 +45,7 @@ func GaugeQuery(data map[uint32][]DataPoint, query Query) (interface{}, error) {
 
 	for _, points := range data {
 
-		values = append(values, getValues(points)...)
+		values = append(values, aggregateValues(getValues(points), query.Aggregation))
 
 	}
 
@@ -56,14 +56,14 @@ func HistogramQuery(results map[uint32][]DataPoint, query Query) (interface{}, e
 
 	interval := uint32(query.Interval)
 
-	bucketed := bucketData(results, interval, query.From, query.To)
+	bucketed := bucketData(results, interval, query.From, query.To, query.Aggregation)
 
 	if query.GroupByObjects {
 
 		return bucketed, nil
 	}
 
-	return mergeAllObjects(bucketed), nil
+	return mergeAllObjects(bucketed, query.Aggregation), nil
 }
 
 func GridQuery(results map[uint32][]DataPoint, query Query) (interface{}, error) {
@@ -72,27 +72,25 @@ func GridQuery(results map[uint32][]DataPoint, query Query) (interface{}, error)
 
 	for objID, points := range results {
 
-		values := getValues(points)
-
-		grid[objID] = aggregateValues(values, query.Aggregation)
+		grid[objID] = aggregateValues(getValues(points), query.Aggregation)
 	}
 
 	return grid, nil
 }
 
-func bucketData(data map[uint32][]DataPoint, interval uint32, from uint32, to uint32) map[uint32][]DataPoint {
+func bucketData(data map[uint32][]DataPoint, interval uint32, from uint32, to uint32, aggregation string) map[uint32][]DataPoint {
 
 	bucketed := make(map[uint32][]DataPoint)
 
 	for objID, points := range data {
 
-		bucketed[objID] = createBuckets(points, interval, from, to)
+		bucketed[objID] = createBuckets(points, interval, from, to, aggregation)
 	}
 
 	return bucketed
 }
 
-func createBuckets(points []DataPoint, interval uint32, from uint32, to uint32) []DataPoint {
+func createBuckets(points []DataPoint, interval uint32, from uint32, to uint32, aggregation string) []DataPoint {
 
 	sort.Slice(points, func(i, j int) bool {
 
@@ -123,7 +121,7 @@ func createBuckets(points []DataPoint, interval uint32, from uint32, to uint32) 
 
 		if len(values) > 0 {
 
-			aggregated = aggregateValues(values, "AVG")
+			aggregated = aggregateValues(values, aggregation)
 
 		} else {
 
@@ -142,7 +140,7 @@ func createBuckets(points []DataPoint, interval uint32, from uint32, to uint32) 
 	return bucketed
 }
 
-func mergeAllObjects(data map[uint32][]DataPoint) []DataPoint {
+func mergeAllObjects(data map[uint32][]DataPoint, aggregation string) []DataPoint {
 
 	var allPoints []DataPoint
 
@@ -170,7 +168,7 @@ func mergeAllObjects(data map[uint32][]DataPoint) []DataPoint {
 
 				Timestamp: currentTime,
 
-				Value: aggregateValues(valuesAtSameTime, "AVG"),
+				Value: aggregateValues(valuesAtSameTime, aggregation),
 			})
 
 			valuesAtSameTime = nil
@@ -188,7 +186,7 @@ func mergeAllObjects(data map[uint32][]DataPoint) []DataPoint {
 
 			Timestamp: currentTime,
 
-			Value: aggregateValues(valuesAtSameTime, "AVG"),
+			Value: aggregateValues(valuesAtSameTime, aggregation),
 		})
 
 	}
@@ -198,20 +196,12 @@ func mergeAllObjects(data map[uint32][]DataPoint) []DataPoint {
 
 func getValues(points []DataPoint) []interface{} {
 
-	var values []interface{}
+	values := make([]interface{}, len(points))
 
 	for _, point := range points {
 
-		switch v := point.Value.(type) {
+		values = append(values, point.Value)
 
-		case []interface{}:
-
-			values = append(values, v...)
-
-		default:
-
-			values = append(values, v)
-		}
 	}
 
 	return values

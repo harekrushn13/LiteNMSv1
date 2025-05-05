@@ -62,16 +62,6 @@ func (pc *ProvisionController) ProvisionDevice(c *gin.Context) {
 		return
 	}
 
-	//if discoveryStatus != Success {
-	//
-	//	c.JSON(http.StatusBadRequest, gin.H{
-	//
-	//		"error": "can only provision from successful discoveries",
-	//	})
-	//
-	//	return
-	//}
-
 	var count int
 
 	err = pc.DB.Get(&count, `
@@ -86,13 +76,6 @@ func (pc *ProvisionController) ProvisionDevice(c *gin.Context) {
 
 		return
 	}
-
-	//if count != len(getCredentialIDs(request.Devices)) {
-	//
-	//	c.JSON(http.StatusBadRequest, gin.H{"error": "one or more credential_ids not found"})
-	//
-	//	return
-	//}
 
 	tx, err := pc.DB.Beginx()
 

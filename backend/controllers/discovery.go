@@ -39,40 +39,15 @@ func (controller *DiscoveryController) CreateDiscovery(context *gin.Context) {
 		return
 	}
 
-	if request.IP == "" && request.IPRange == "" {
+	if err := controller.validateDiscoveryInput(struct {
+		CredentialIDs []uint16
+		IP            string
+		IPRange       string
+	}(request)); err != nil {
 
-		context.JSON(http.StatusBadRequest, gin.H{"error": "either ip or ip_range must be provided"})
-
-		return
-	}
-
-	if request.IP != "" && request.IPRange != "" {
-
-		context.JSON(http.StatusBadRequest, gin.H{"error": "provide either ip or ip_range, not both"})
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 		return
-	}
-
-	if request.IP != "" {
-
-		if net.ParseIP(request.IP) == nil {
-
-			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid ip format"})
-
-			return
-		}
-	}
-
-	if request.IPRange != "" {
-
-		_, _, err := net.ParseCIDR(request.IPRange)
-
-		if err != nil {
-
-			context.JSON(http.StatusBadRequest, gin.H{"error": "invalid ip_range format"})
-
-			return
-		}
 	}
 
 	var count int
@@ -84,13 +59,6 @@ func (controller *DiscoveryController) CreateDiscovery(context *gin.Context) {
 	if err != nil {
 
 		context.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify credentials"})
-
-		return
-	}
-
-	if count != len(request.CredentialIDs) {
-
-		context.JSON(http.StatusBadRequest, gin.H{"error": "one or more credential_ids not found"})
 
 		return
 	}
@@ -160,13 +128,6 @@ func (controller *DiscoveryController) StartDiscovery(c *gin.Context) {
 		return
 	}
 
-	//if discovery.DiscoveryStatus == Success || discovery.DiscoveryStatus == Failed {
-	//
-	//	c.JSON(http.StatusBadRequest, gin.H{"error": "discovery already completed"})
-	//
-	//	return
-	//}
-
 	var credentials []Credential
 
 	err = controller.DB.Select(&credentials, `
@@ -228,11 +189,42 @@ func (controller *DiscoveryController) StartDiscovery(c *gin.Context) {
 
 		"discovered_devices": discoveredDevices,
 
-		"discovered_devices_count": len(discoveredDevices),
+		"discovery_count": len(discoveredDevices),
 
 		"message": "Discovery completed successfully",
 	})
 
+}
+
+func (controller *DiscoveryController) validateDiscoveryInput(req struct {
+	CredentialIDs []uint16
+	IP            string
+	IPRange       string
+}) error {
+
+	if req.IP == "" && req.IPRange == "" {
+
+		return fmt.Errorf("either ip or ip_range must be provided")
+	}
+
+	if req.IP != "" && req.IPRange != "" {
+
+		return fmt.Errorf("provide either ip or ip_range, not both")
+	}
+
+	if req.IP != "" && net.ParseIP(req.IP) == nil {
+
+		return fmt.Errorf("invalid ip format")
+
+	} else {
+
+		if _, _, err := net.ParseCIDR(req.IPRange); err != nil {
+
+			return fmt.Errorf("invalid ip_range format")
+		}
+	}
+
+	return nil
 }
 
 func (controller *DiscoveryController) runDiscovery(allIPs []string, credentials []Credential) []map[string]interface{} {

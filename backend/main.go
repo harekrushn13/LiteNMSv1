@@ -116,7 +116,7 @@ func main() {
 
 	<-signalChannel
 
-	fmt.Println("\nstart shutting down : ", time.Now())
+	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
@@ -126,8 +126,6 @@ func main() {
 
 		log.Printf("Server shutdown failed: %v", err)
 	}
-
-	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
 
 	pollingServer.Shutdown()
 

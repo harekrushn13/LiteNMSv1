@@ -42,6 +42,10 @@ func main() {
 				runtime.ReadMemStats(&stat)
 
 				log.Printf("NumGC: %v  GCCPUFraction : %v", stat.NumGC, stat.GCCPUFraction)
+
+				hit, missed, hitratio := GetMetrics()
+
+				log.Printf("hit: %v, missed: %v, hitratio: %v", hit, missed, hitratio)
 			}
 		}
 	}()
