@@ -27,6 +27,18 @@ type Reader struct {
 	lock sync.RWMutex
 
 	results map[uint32][]DataPoint // result of query
+
+	// for parser memory reuse
+
+	dataValues []interface{}
+
+	getDataValues []interface{}
+
+	grid map[uint32]interface{}
+
+	bucketed map[uint32][]DataPoint
+
+	bucketMap map[uint32][]interface{}
 }
 
 func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
@@ -71,6 +83,16 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 			lock: sync.RWMutex{},
 
 			results: make(map[uint32][]DataPoint),
+
+			dataValues: make([]interface{}, 0),
+
+			getDataValues: make([]interface{}, 0),
+
+			grid: make(map[uint32]interface{}),
+
+			bucketed: make(map[uint32][]DataPoint),
+
+			bucketMap: make(map[uint32][]interface{}),
 		}
 
 		for j := 0; j < GetDayWorkers(); j++ {
@@ -92,7 +114,7 @@ func (reader *Reader) runReader() {
 
 		for query := range reader.queryEvents {
 
-			results, err := reader.FetchData(query.Query)
+			err := reader.FetchData(query.Query)
 
 			if err != nil {
 
@@ -110,7 +132,7 @@ func (reader *Reader) runReader() {
 				continue
 			}
 
-			parseResult, err := ParseResult(results, query.Query)
+			parseResult, err := reader.ParseResult(query.Query)
 
 			var response Response
 

@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
+func (reader *Reader) FetchData(query Query) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 
@@ -27,7 +27,7 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 	if err != nil {
 
-		return nil, fmt.Errorf("reader.fetchData error : %v", err)
+		return fmt.Errorf("reader.fetchData error : %v", err)
 	}
 
 	workingDirectory := GetWorkingDirectory()
@@ -45,18 +45,27 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 		if len(query.ObjectIDs) == 0 {
 
-			objects, err := store.GetKeys()
+			var objects []uint32
 
-			if err != nil {
+			if _, exits := reader.objectsMapping[path]; exits {
 
-				return nil, fmt.Errorf("GetKeys : %v", err)
+				objects = reader.objectsMapping[path]
+
+			} else {
+
+				objects, err = store.GetKeys()
+
+				if err != nil {
+
+					return fmt.Errorf("GetKeys : %v", err)
+				}
+
+				reader.lock.Lock()
+
+				reader.objectsMapping[path] = objects
+
+				reader.lock.Unlock()
 			}
-
-			reader.lock.Lock()
-
-			reader.objectsMapping[path] = objects
-
-			reader.lock.Unlock()
 
 			reader.fetchForObjectIDs(ctx, wg, path, store, query, dataType, objects)
 
@@ -67,19 +76,19 @@ func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
 
 	}
 
-	if err := reader.waitWithContext(ctx, wg); err != nil {
+	if err = reader.waitWithContext(ctx, wg); err != nil {
 
-		return nil, err
+		return err
 	}
 
 	reader.mergeResults(query, fromTime, toTime, workingDirectory)
 
 	if len(reader.results) == 0 {
 
-		return nil, fmt.Errorf("no data found in time range %d-%d", query.From, query.To)
+		return fmt.Errorf("no data found in time range %d-%d", query.From, query.To)
 	}
 
-	return reader.results, nil
+	return nil
 }
 
 func getTimeBounds(from, to uint32) (time.Time, time.Time) {
@@ -110,7 +119,7 @@ func (reader *Reader) fetchForObjectIDs(ctx context.Context, wg *sync.WaitGroup,
 
 	if len(objects) > 0 {
 
-		objectIds = reader.objectsMapping[path]
+		objectIds = objects
 
 	} else {
 
@@ -193,6 +202,11 @@ func (reader *Reader) waitWithContext(ctx context.Context, wg *sync.WaitGroup) e
 }
 
 func (reader *Reader) mergeResults(query Query, fromTime, toTime time.Time, base string) {
+
+	for k := range reader.results {
+
+		delete(reader.results, k)
+	}
 
 	cache := GetCache()
 
