@@ -8,6 +8,7 @@ import (
 	"github.com/pebbe/zmq4"
 	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
+	"sync"
 )
 
 type QueryServer struct {
@@ -20,6 +21,10 @@ type QueryServer struct {
 	shutdownPull chan bool
 
 	shutdownPush chan bool
+
+	queryMapping map[uint64]chan Response
+
+	lock sync.RWMutex
 }
 
 func NewQueryServer(queryChannel chan QueryMap, queryMapping map[uint64]chan Response) (*QueryServer, error) {
@@ -82,16 +87,20 @@ func NewQueryServer(queryChannel chan QueryMap, queryMapping map[uint64]chan Res
 		shutdownPull: make(chan bool, 1),
 
 		shutdownPush: make(chan bool, 1),
+
+		queryMapping: make(map[uint64]chan Response),
+
+		lock: sync.RWMutex{},
 	}
 
-	go server.querySender(queryChannel, queryMapping)
+	go server.querySender(queryChannel)
 
-	go server.responseReceiver(queryMapping)
+	go server.responseReceiver()
 
 	return server, nil
 }
 
-func (server *QueryServer) querySender(queryChannel chan QueryMap, queryMapping map[uint64]chan Response) {
+func (server *QueryServer) querySender(queryChannel chan QueryMap) {
 
 	for {
 
@@ -132,12 +141,16 @@ func (server *QueryServer) querySender(queryChannel chan QueryMap, queryMapping 
 				continue
 			}
 
-			queryMapping[querySend.RequestID] = queryMap.Response
+			server.lock.Lock()
+
+			server.queryMapping[querySend.RequestID] = queryMap.Response
+
+			server.lock.Unlock()
 		}
 	}
 }
 
-func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Response) {
+func (server *QueryServer) responseReceiver() {
 
 	for {
 
@@ -171,12 +184,16 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 				continue
 			}
 
-			if ch, ok := queryMapping[response.RequestID]; ok {
+			server.lock.Lock()
+
+			if ch, ok := server.queryMapping[response.RequestID]; ok {
 
 				ch <- response
 
-				delete(queryMapping, response.RequestID)
+				delete(server.queryMapping, response.RequestID)
 			}
+
+			server.lock.Unlock()
 		}
 	}
 }

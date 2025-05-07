@@ -16,6 +16,7 @@ import (
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"runtime"
+	"runtime/debug"
 	"syscall"
 	"time"
 )
@@ -58,6 +59,8 @@ func main() {
 	}
 
 	defer Logger.Sync()
+
+	debug.SetGCPercent(300)
 
 	if err := InitCache(); err != nil {
 

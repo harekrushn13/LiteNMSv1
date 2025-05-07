@@ -158,9 +158,9 @@ func (indexManager *IndexManager) GetAllKeys() ([]uint32, error) {
 
 	var allKeys []uint32
 
-	indexManager.lock.RLock()
+	indexManager.lock.Lock()
 
-	defer indexManager.lock.RUnlock()
+	defer indexManager.lock.Unlock()
 
 	if len(indexManager.indexHandles) == 0 {
 

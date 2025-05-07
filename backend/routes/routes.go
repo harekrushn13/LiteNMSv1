@@ -2,6 +2,7 @@ package routes
 
 import (
 	. "backend/controllers"
+	. "backend/service"
 	. "backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -11,11 +12,17 @@ func InitRoutes(db *sqlx.DB, deviceChannel chan []PollerDevice, queryChannel cha
 
 	router := gin.Default()
 
-	credentialCtrl := NewCredentialController(db)
+	credentialService := NewCredentialService(db)
 
-	discoveryCtrl := NewDiscoveryController(db)
+	credentialCtrl := NewCredentialController(credentialService)
 
-	provisionCtrl := NewProvisionController(db, deviceChannel)
+	discoveryService := NewDiscoveryService(db)
+
+	discoveryCtrl := NewDiscoveryController(discoveryService)
+
+	provisionService := NewProvisionService(db, deviceChannel)
+
+	provisionCtrl := NewProvisionController(provisionService)
 
 	queryCtrl := NewQueryController(db, queryChannel)
 

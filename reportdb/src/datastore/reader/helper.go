@@ -93,8 +93,8 @@ func (reader *Reader) FetchData(query Query) error {
 
 func getTimeBounds(from, to uint32) (time.Time, time.Time) {
 
-	return time.Unix(int64(from), 0).Truncate(24 * time.Hour).UTC(),
-		time.Unix(int64(to), 0).Truncate(24 * time.Hour).UTC()
+	return time.Unix(int64(from), 0).Truncate(24 * time.Hour).Local(),
+		time.Unix(int64(to), 0).Truncate(24 * time.Hour).Local()
 }
 
 func (reader *Reader) getStorePathAndEngine(current time.Time, counterID uint16, base string) (string, *StoreEngine, error) {

@@ -2,18 +2,18 @@ package controllers
 
 import (
 	. "backend/models"
+	. "backend/service"
 	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
 	"net/http"
 )
 
 type CredentialController struct {
-	DB *sqlx.DB
+	Service *CredentialService
 }
 
-func NewCredentialController(db *sqlx.DB) *CredentialController {
+func NewCredentialController(service *CredentialService) *CredentialController {
 
-	return &CredentialController{DB: db}
+	return &CredentialController{Service: service}
 }
 
 func (controller *CredentialController) CreateCredential(context *gin.Context) {
@@ -27,11 +27,7 @@ func (controller *CredentialController) CreateCredential(context *gin.Context) {
 		return
 	}
 
-	query := `INSERT INTO credential_profile (username, password, port) VALUES ($1, $2, $3) RETURNING credential_id`
-
-	var credentialID uint16
-
-	err := controller.DB.QueryRow(query, credential.Username, credential.Password, credential.Port).Scan(&credentialID)
+	credentialID, err := controller.Service.CreateCredential(&credential)
 
 	if err != nil {
 
