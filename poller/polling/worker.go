@@ -1,7 +1,6 @@
 package polling
 
 import (
-	"container/heap"
 	"fmt"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
@@ -12,50 +11,11 @@ import (
 	"time"
 )
 
-func (poller *Poller) startScheduler() {
-
-	for {
-
-		select {
-
-		case <-poller.shutdownChan:
-
-			return
-
-		default:
-
-			now := time.Now()
-
-			poller.taskLock.Lock()
-
-			if poller.taskQueue.Len() > 0 {
-
-				nextTask := poller.taskQueue[0]
-
-				if !nextTask.NextExecution.After(now) {
-
-					task := heap.Pop(&poller.taskQueue).(*Task)
-
-					poller.workerChan <- task
-
-					task.NextExecution = now.Add(task.Interval)
-
-					heap.Push(&poller.taskQueue, task)
-				}
-			}
-
-			poller.taskLock.Unlock()
-
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
-}
-
 func (poller *Poller) startWorker(eventChannel chan Events) {
 
-	pollDevicePool := make(chan struct{}, 50)
+	pollDevicePool := make(chan struct{}, GetPollDeviceBuffer())
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < GetPollDeviceBuffer(); i++ {
 
 		pollDevicePool <- struct{}{}
 	}

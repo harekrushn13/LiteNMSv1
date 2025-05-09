@@ -45,6 +45,8 @@ func NewQueryServer(queryChannel chan QueryMap, queryMapping map[uint64]chan Res
 		return nil, fmt.Errorf("failed to create PUSH socket: %v", err)
 	}
 
+	pushSocket.SetLinger(0)
+
 	if err := pushSocket.Connect("tcp://localhost:6004"); err != nil {
 
 		pushSocket.Close()
@@ -160,6 +162,17 @@ func (server *QueryServer) responseReceiver() {
 
 			server.pullSocket.Close()
 
+			server.lock.Lock()
+
+			for id, ch := range server.queryMapping {
+
+				ch <- Response{RequestID: id, Error: "Server shutdown"}
+
+				close(ch)
+			}
+
+			server.lock.Unlock()
+
 			server.shutdownPull <- true
 
 			return
@@ -191,6 +204,8 @@ func (server *QueryServer) responseReceiver() {
 				ch <- response
 
 				delete(server.queryMapping, response.RequestID)
+
+				close(ch)
 			}
 
 			server.lock.Unlock()
@@ -209,4 +224,5 @@ func (server *QueryServer) Shutdown() {
 	<-server.shutdownPull
 
 	<-server.shutdownPush
+
 }

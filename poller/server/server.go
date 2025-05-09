@@ -59,6 +59,8 @@ func NewPollingServer(deviceChannel chan []Device, dataChannel chan []Events) (*
 		return nil, fmt.Errorf("failed to create PUB socket: %v", err)
 	}
 
+	pushSocket.SetLinger(0)
+
 	if err := pushSocket.Bind("tcp://*:6001"); err != nil {
 
 		pushSocket.Close()

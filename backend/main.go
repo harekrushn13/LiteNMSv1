@@ -118,6 +118,12 @@ func main() {
 
 	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
 
+	pollingServer.Shutdown()
+
+	dbServer.Shutdown()
+
+	queryServer.Shutdown()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	defer cancel()
@@ -126,12 +132,6 @@ func main() {
 
 		log.Printf("Server shutdown failed: %v", err)
 	}
-
-	pollingServer.Shutdown()
-
-	dbServer.Shutdown()
-
-	queryServer.Shutdown()
 
 	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
 }

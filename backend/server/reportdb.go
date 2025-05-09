@@ -33,6 +33,8 @@ func NewDBServer(dataChannel chan []byte) (*DBServer, error) {
 		return nil, fmt.Errorf("failed to create PUSH socket: %v", err)
 	}
 
+	pushSocket.SetLinger(0)
+
 	if err := pushSocket.Connect("tcp://localhost:6003"); err != nil {
 
 		pushSocket.Close()

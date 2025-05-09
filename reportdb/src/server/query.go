@@ -60,6 +60,8 @@ func NewQueryServer(queryChannel chan QueryReceive, resultChannel chan Response)
 		return nil, fmt.Errorf("failed to create PUSH socket: %v", err)
 	}
 
+	pushSocket.SetLinger(0)
+
 	if err := pushSocket.Bind("tcp://*:6005"); err != nil {
 
 		pushSocket.Close()
