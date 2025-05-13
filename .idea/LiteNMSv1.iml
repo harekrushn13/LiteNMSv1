@@ -7,6 +7,9 @@
       <excludeFolder url="file://$MODULE_DIR$/reportdb/profiling/profiles" />
       <excludeFolder url="file://$MODULE_DIR$/reportdb/temp" />
       <excludeFolder url="file://$MODULE_DIR$/reportdb/profiling" />
+      <excludeFolder url="file://$MODULE_DIR$/backend/logs" />
+      <excludeFolder url="file://$MODULE_DIR$/poller/logs" />
+      <excludeFolder url="file://$MODULE_DIR$/reportdb/src/logs" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

@@ -27,7 +27,7 @@ func main() {
 		return
 	}
 
-	defer Logger.Sync()
+	defer StopAsyncLogger()
 
 	signalChannel := make(chan os.Signal, 1)
 
@@ -35,7 +35,7 @@ func main() {
 
 	if err := InitDB(); err != nil {
 
-		Logger.Error("Failed to initialize database", zap.Error(err))
+		AsyncError("Failed to initialize database", zap.Error(err))
 
 		return
 	}
@@ -44,7 +44,7 @@ func main() {
 
 	if err := InitConfig(); err != nil {
 
-		Logger.Error("Failed to initialize config", zap.Error(err))
+		AsyncError("Failed to initialize config", zap.Error(err))
 
 		return
 	}
@@ -63,7 +63,7 @@ func main() {
 
 	if err != nil {
 
-		Logger.Error("Failed to initialize polling server", zap.Error(err))
+		AsyncError("Failed to initialize polling server", zap.Error(err))
 
 		pollingServer.Shutdown()
 
@@ -74,7 +74,7 @@ func main() {
 
 	if err != nil {
 
-		Logger.Error("Failed to initialize database server", zap.Error(err))
+		AsyncError("Failed to initialize database server", zap.Error(err))
 
 		pollingServer.Shutdown()
 
@@ -87,7 +87,7 @@ func main() {
 
 	if err != nil {
 
-		Logger.Error("Failed to initialize query client", zap.Error(err))
+		AsyncError("Failed to initialize query client", zap.Error(err))
 
 		queryServer.Shutdown()
 
@@ -108,7 +108,7 @@ func main() {
 
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 
-			Logger.Error("Failed to start server", zap.Error(err))
+			AsyncError("Failed to start server", zap.Error(err))
 
 		}
 
@@ -116,7 +116,7 @@ func main() {
 
 	<-signalChannel
 
-	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
+	AsyncInfo("Start shutting down", zap.Time("time", time.Now()))
 
 	pollingServer.Shutdown()
 
@@ -133,5 +133,5 @@ func main() {
 		log.Printf("Server shutdown failed: %v", err)
 	}
 
-	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
+	AsyncInfo("Shutdown complete", zap.Time("time", time.Now()))
 }

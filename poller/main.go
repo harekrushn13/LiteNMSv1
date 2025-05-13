@@ -22,7 +22,7 @@ func main() {
 		return
 	}
 
-	defer Logger.Sync()
+	defer StopAsyncLogger()
 
 	signalChannel := make(chan os.Signal, 1)
 
@@ -58,9 +58,9 @@ func main() {
 
 	<-signalChannel
 
-	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
+	AsyncInfo("Start shutting down", zap.Time("time", time.Now()))
 
 	pollingServer.Shutdown()
 
-	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
+	AsyncInfo("Shutdown complete", zap.Time("time", time.Now()))
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"go.uber.org/zap"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -16,7 +15,6 @@ import (
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"runtime"
-	"runtime/debug"
 	"syscall"
 	"time"
 )
@@ -42,12 +40,13 @@ func main() {
 
 				runtime.ReadMemStats(&stat)
 
-				log.Printf("NumGC: %v  GCCPUFraction : %v", stat.NumGC, stat.GCCPUFraction)
+				AsyncInfo("", zap.Uint32("NumGC", stat.NumGC), zap.Float64("GCCPUFraction", stat.GCCPUFraction))
 
 				hit, missed, hitratio := GetMetrics()
 
-				log.Printf("hit: %v, missed: %v, hitratio: %v", hit, missed, hitratio)
+				AsyncInfo("", zap.Uint64("hit", hit), zap.Uint64("missed", missed), zap.Float64("hitratio", hitratio))
 			}
+
 		}
 	}()
 
@@ -58,9 +57,7 @@ func main() {
 		return
 	}
 
-	defer Logger.Sync()
-
-	debug.SetGCPercent(300)
+	defer StopAsyncLogger()
 
 	if err := InitCache(); err != nil {
 

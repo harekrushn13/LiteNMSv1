@@ -32,20 +32,17 @@ func InitLogger() error {
 		return lvl != zapcore.InfoLevel
 	})
 
-	file, err := os.OpenFile("reportdb_errors.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-
-	if err != nil {
-
-		return err
-	}
+	fileWriter := zapcore.AddSync(NewLogger("logs", 1, 7, 3, false))
 
 	consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), consoleLevel)
 
-	fileCore := zapcore.NewCore(fileEncoder, zapcore.AddSync(file), fileLevel)
+	fileCore := zapcore.NewCore(fileEncoder, fileWriter, fileLevel)
 
 	core := zapcore.NewTee(consoleCore, fileCore)
 
 	Logger = zap.New(core, zap.AddCaller())
+
+	startAsyncLogger()
 
 	return nil
 }

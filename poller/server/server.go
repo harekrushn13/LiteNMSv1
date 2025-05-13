@@ -114,7 +114,7 @@ func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
 
 			if err != nil {
 
-				Logger.Warn("pollingReceiver:Error receiving query", zap.Error(err))
+				AsyncError("pollingReceiver:Error receiving query", zap.Error(err))
 
 				continue
 			}
@@ -123,7 +123,7 @@ func (server *PollingServer) pollingReceiver(deviceChannel chan []Device) {
 
 			if err := msgpack.Unmarshal(msg, &devices); err != nil {
 
-				Logger.Warn("pollingReceiver: Error unmarshalling query", zap.Error(err))
+				AsyncError("pollingReceiver: Error unmarshalling query", zap.Error(err))
 
 				continue
 			}
@@ -157,14 +157,14 @@ func (server *PollingServer) pollingSender(dataChannel chan []Events) {
 
 			if err != nil {
 
-				Logger.Error("pollingSender: Error marshaling response", zap.Error(err))
+				AsyncError("pollingSender: Error marshaling response", zap.Error(err))
 
 				continue
 			}
 
 			if _, err = server.pushSocket.SendBytes(data, 0); err != nil {
 
-				Logger.Error("pollingSender: Error sending response", zap.Error(err))
+				AsyncError("pollingSender: Error sending response", zap.Error(err))
 
 				continue
 			}

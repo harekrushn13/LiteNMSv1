@@ -110,7 +110,7 @@ func (server *PollingServer) pollingReceiver(dataChannel chan []byte) {
 
 			if err != nil {
 
-				Logger.Warn("pollingReceiver:Error receiving data", zap.Error(err))
+				AsyncWarn("pollingReceiver:Error receiving data", zap.Error(err))
 
 				continue
 			}
@@ -142,14 +142,14 @@ func (server *PollingServer) pollingSender(deviceChannel chan []PollerDevice) {
 
 			if err != nil {
 
-				Logger.Warn("pollingSender: Error marshaling data", zap.Error(err))
+				AsyncWarn("pollingSender: Error marshaling data", zap.Error(err))
 
 				continue
 			}
 
 			if _, err := server.pushSocket.SendBytes(data, 0); err != nil {
 
-				Logger.Warn("pollingSender : Error sending data", zap.Error(err))
+				AsyncWarn("pollingSender : Error sending data", zap.Error(err))
 
 				continue
 			}

@@ -131,14 +131,14 @@ func (server *QueryServer) querySender(queryChannel chan QueryMap) {
 
 			if err != nil {
 
-				Logger.Warn("querySender: failed to marshal query", zap.Error(err))
+				AsyncWarn("querySender: failed to marshal query", zap.Error(err))
 
 				continue
 			}
 
 			if _, err := server.pushSocket.SendBytes(queryBytes, 0); err != nil {
 
-				Logger.Warn("querySender: failed to send query", zap.Error(err))
+				AsyncWarn("querySender: failed to send query", zap.Error(err))
 
 				continue
 			}
@@ -183,7 +183,7 @@ func (server *QueryServer) responseReceiver() {
 
 			if err != nil {
 
-				Logger.Warn("responseReceiver: Error receiving response", zap.Error(err))
+				AsyncWarn("responseReceiver: Error receiving response", zap.Error(err))
 
 				continue
 			}
@@ -192,7 +192,7 @@ func (server *QueryServer) responseReceiver() {
 
 			if err := json.Unmarshal(data, &response); err != nil {
 
-				Logger.Warn("responseReceiver: Error unmarshalling response", zap.Error(err))
+				AsyncWarn("responseReceiver: Error unmarshalling response", zap.Error(err))
 
 				continue
 			}

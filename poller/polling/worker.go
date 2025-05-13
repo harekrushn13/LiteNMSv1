@@ -71,7 +71,7 @@ func (poller *Poller) pollCounter(counterID uint16, eventChannel chan Events, po
 
 			if err != nil {
 
-				Logger.Info("Error polling device",
+				AsyncInfo("Error polling device",
 					zap.String("ip", device.IP),
 					zap.Uint32("objectID", device.ObjectID),
 					zap.Uint16("counterID", counterID),

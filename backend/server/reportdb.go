@@ -78,7 +78,7 @@ func (server *DBServer) dbSender(dataChannel chan []byte) {
 
 			if _, err := server.pushSocket.SendBytes(data, 0); err != nil {
 
-				Logger.Warn("dbSender : Error sending data", zap.Error(err))
+				AsyncWarn("dbSender : Error sending data", zap.Error(err))
 
 				continue
 			}
