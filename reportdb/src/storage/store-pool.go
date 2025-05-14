@@ -152,6 +152,8 @@ func (storePool *StorePool) Shutdown() {
 		}
 
 		engine.fileManager.Close()
+
+		engine.indexManager.Close()
 	}
 
 	storePool.lock.Unlock()

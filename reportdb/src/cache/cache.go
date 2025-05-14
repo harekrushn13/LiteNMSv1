@@ -13,7 +13,7 @@ func InitCache() error {
 	var err error
 
 	globalCache, err = ristretto.NewCache(&ristretto.Config[string, []DataPoint]{
-		NumCounters: 1e7,     // Track 10M keys
+		NumCounters: 5000,
 		MaxCost:     1 << 30, // 1GB max cache size
 		BufferItems: 64,      // Number of keys per Get buffer
 		Metrics:     true,

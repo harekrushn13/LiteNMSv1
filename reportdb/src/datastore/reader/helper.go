@@ -17,7 +17,7 @@ import (
 
 func (reader *Reader) FetchData(query Query) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(GetQueryTimeout()))
 
 	defer cancel()
 
@@ -60,11 +60,7 @@ func (reader *Reader) FetchData(query Query) error {
 					return fmt.Errorf("GetKeys : %v", err)
 				}
 
-				reader.lock.Lock()
-
 				reader.objectsMapping[path] = objects
-
-				reader.lock.Unlock()
 			}
 
 			reader.fetchForObjectIDs(ctx, wg, path, store, query, dataType, objects)
@@ -136,7 +132,7 @@ func (reader *Reader) fetchForObjectIDs(ctx context.Context, wg *sync.WaitGroup,
 
 			return
 
-		case <-reader.dayPool:
+		case <-reader.objectPool:
 
 			wg.Add(1)
 
@@ -146,7 +142,7 @@ func (reader *Reader) fetchForObjectIDs(ctx context.Context, wg *sync.WaitGroup,
 
 					wg.Done()
 
-					reader.dayPool <- struct{}{}
+					reader.objectPool <- struct{}{}
 				}()
 
 				cacheKey := path + "_" + strconv.FormatUint(uint64(objectID), 10)

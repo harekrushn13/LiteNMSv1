@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/bytedance/gopkg/util/gctuner"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
@@ -16,7 +17,6 @@ import (
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"runtime"
-	"runtime/debug"
 	"syscall"
 	"time"
 )
@@ -60,7 +60,7 @@ func main() {
 
 	defer Logger.Sync()
 
-	debug.SetGCPercent(300)
+	gctuner.Tuning(uint64(float64(SysTotalMemory()) * 0.5))
 
 	if err := InitCache(); err != nil {
 

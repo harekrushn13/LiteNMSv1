@@ -12,7 +12,7 @@ import (
 type Reader struct {
 	id uint8
 
-	dayPool chan struct{} // to read multiple day in parallel for a query
+	objectPool chan struct{} // to read multiple day in parallel for a query
 
 	queryEvents chan QueryReceive // channel to take query from query distributor
 
@@ -22,23 +22,27 @@ type Reader struct {
 
 	waitGroup *sync.WaitGroup // to wait completion of all readers
 
-	objectsMapping map[string][]uint32
-
-	lock sync.RWMutex
+	objectsMapping map[string][]uint32 // useful when no objectId given in a query
 
 	results map[uint32][]DataPoint // result of query
 
-	// for parser memory reuse
+	ParserBuffer
+}
 
+type ParserBuffer struct {
 	dataValues []interface{}
 
 	getDataValues []interface{}
 
-	grid map[uint32]interface{}
+	dataPoints []DataPoint
 
-	bucketed map[uint32][]DataPoint
+	allDataPoints []DataPoint
 
-	bucketMap map[uint32][]interface{}
+	grid map[uint32]interface{} // map[objectID]->value
+
+	bucketed map[uint32][]DataPoint // map[objectID]->[]DataPoint
+
+	bucketMap map[uint32][]interface{} // map[timestamp]->[values]
 }
 
 func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
@@ -68,7 +72,7 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			id: uint8(i),
 
-			dayPool: make(chan struct{}, GetDayWorkers()),
+			objectPool: make(chan struct{}, GetObjectWorkers()),
 
 			queryEvents: make(chan QueryReceive, GetQueryBuffer()),
 
@@ -80,25 +84,31 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			objectsMapping: make(map[string][]uint32),
 
-			lock: sync.RWMutex{},
-
 			results: make(map[uint32][]DataPoint),
 
-			dataValues: make([]interface{}, 0),
+			ParserBuffer: ParserBuffer{
 
-			getDataValues: make([]interface{}, 0),
+				dataValues: make([]interface{}, 0, 100),
 
-			grid: make(map[uint32]interface{}),
+				getDataValues: make([]interface{}, 0, 100),
 
-			bucketed: make(map[uint32][]DataPoint),
+				dataPoints: make([]DataPoint, 0, 100),
 
-			bucketMap: make(map[uint32][]interface{}),
+				allDataPoints: make([]DataPoint, 0, 100),
+
+				grid: make(map[uint32]interface{}),
+
+				bucketed: make(map[uint32][]DataPoint),
+
+				bucketMap: make(map[uint32][]interface{}),
+			},
 		}
 
-		for j := 0; j < GetDayWorkers(); j++ {
+		for j := 0; j < GetObjectWorkers(); j++ {
 
-			readers[i].dayPool <- struct{}{}
+			readers[i].objectPool <- struct{}{}
 		}
+
 	}
 
 	return readers, nil

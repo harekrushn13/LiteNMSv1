@@ -54,16 +54,14 @@ func (reader *Reader) GaugeQuery(query Query) (interface{}, error) {
 
 func (reader *Reader) HistogramQuery(query Query) (interface{}, error) {
 
-	interval := uint32(query.Interval)
-
-	bucketed := reader.bucketData(interval, query.From, query.To, query.Aggregation)
+	bucketed := reader.bucketData(uint32(query.Interval), query.From, query.To, query.Aggregation)
 
 	if query.GroupByObjects {
 
 		return bucketed, nil
 	}
 
-	return mergeAllObjects(bucketed, query.Aggregation), nil
+	return reader.mergeAllObjects(query.Aggregation), nil
 }
 
 func (reader *Reader) GridQuery(query Query) (interface{}, error) {
@@ -120,7 +118,7 @@ func (reader *Reader) createBuckets(points []DataPoint, interval uint32, from ui
 		reader.bucketMap[bucket] = append(reader.bucketMap[bucket], point.Value)
 	}
 
-	var bucketed []DataPoint
+	var bucketed = make([]DataPoint, 0, (to-from)/interval)
 
 	for time := from - (from % interval); time <= to; time += interval {
 
@@ -149,58 +147,58 @@ func (reader *Reader) createBuckets(points []DataPoint, interval uint32, from ui
 	return bucketed
 }
 
-func mergeAllObjects(data map[uint32][]DataPoint, aggregation string) []DataPoint {
+func (reader *Reader) mergeAllObjects(aggregation string) []DataPoint {
 
-	var allPoints []DataPoint
+	reader.allDataPoints = reader.allDataPoints[:0]
 
-	for _, points := range data {
+	for _, points := range reader.bucketed {
 
-		allPoints = append(allPoints, points...)
+		reader.allDataPoints = append(reader.allDataPoints, points...)
 	}
 
-	sort.Slice(allPoints, func(i, j int) bool {
+	sort.Slice(reader.allDataPoints, func(i, j int) bool {
 
-		return allPoints[i].Timestamp < allPoints[j].Timestamp
+		return reader.allDataPoints[i].Timestamp < reader.allDataPoints[j].Timestamp
 	})
-
-	var merged []DataPoint
 
 	var currentTime uint32
 
-	var valuesAtSameTime []interface{}
+	reader.dataPoints = reader.dataPoints[:0]
 
-	for _, point := range allPoints {
+	reader.dataValues = reader.dataValues[:0]
 
-		if point.Timestamp != currentTime && len(valuesAtSameTime) > 0 {
+	for _, point := range reader.allDataPoints {
 
-			merged = append(merged, DataPoint{
+		if point.Timestamp != currentTime && len(reader.dataValues) > 0 {
+
+			reader.dataPoints = append(reader.dataPoints, DataPoint{
 
 				Timestamp: currentTime,
 
-				Value: aggregateValues(valuesAtSameTime, aggregation),
+				Value: aggregateValues(reader.dataValues, aggregation),
 			})
 
-			valuesAtSameTime = nil
+			reader.dataValues = reader.dataValues[:0]
 		}
 
 		currentTime = point.Timestamp
 
-		valuesAtSameTime = append(valuesAtSameTime, point.Value)
+		reader.dataValues = append(reader.dataValues, point.Value)
 
 	}
 
-	if len(valuesAtSameTime) > 0 {
+	if len(reader.dataValues) > 0 {
 
-		merged = append(merged, DataPoint{
+		reader.dataPoints = append(reader.dataPoints, DataPoint{
 
 			Timestamp: currentTime,
 
-			Value: aggregateValues(valuesAtSameTime, aggregation),
+			Value: aggregateValues(reader.dataValues, aggregation),
 		})
 
 	}
 
-	return merged
+	return reader.dataPoints
 }
 
 func (reader *Reader) getValues(points []DataPoint) []interface{} {

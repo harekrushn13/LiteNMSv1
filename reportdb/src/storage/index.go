@@ -196,3 +196,23 @@ func (indexManager *IndexManager) GetAllKeys() ([]uint32, error) {
 
 	return allKeys, nil
 }
+
+func (indexManager *IndexManager) Close() {
+
+	indexManager.lock.Lock()
+
+	defer indexManager.lock.Unlock()
+
+	for indexId := range indexManager.indexHandles {
+
+		for key := range indexManager.indexHandles[indexId] {
+
+			indexManager.indexHandles[indexId][key] = nil
+
+			delete(indexManager.indexHandles[indexId], key)
+
+		}
+
+		delete(indexManager.indexHandles, indexId)
+	}
+}

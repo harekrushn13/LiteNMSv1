@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 type Config struct {
@@ -22,11 +23,13 @@ type Config struct {
 
 	QueryBuffer int `json:"queryBuffer"`
 
-	DayWorkers int `json:"dayWorkers"`
+	ObjectWorkers int `json:"objectWorkers"`
 
 	FileGrowthSize int `json:"fileGrowthSize"`
 
 	SaveIndexInterval int `json:"saveIndexInterval"`
+
+	QueryTimeout int `json:"queryTimeout"`
 }
 
 type DataType uint8
@@ -159,9 +162,9 @@ func GetQueryBuffer() int {
 	return appConfig.QueryBuffer
 }
 
-func GetDayWorkers() int {
+func GetObjectWorkers() int {
 
-	return appConfig.DayWorkers
+	return appConfig.ObjectWorkers
 }
 
 func GetFileGrowthSize() int {
@@ -189,4 +192,27 @@ func GetCounterType(counterId uint16) (DataType, error) {
 func GetAllCounterTypes() map[uint16]DataType {
 
 	return counterTypes
+}
+
+func GetQueryTimeout() int {
+
+	return appConfig.QueryTimeout
+}
+
+func SysTotalMemory() uint64 {
+
+	in := &syscall.Sysinfo_t{}
+
+	err := syscall.Sysinfo(in)
+
+	if err != nil {
+
+		return 0
+	}
+
+	// If this is a 32-bit system, then these fields are
+	// uint32 instead of uint64.
+	// So we always convert to uint64 to match signature.
+
+	return uint64(in.Totalram) * uint64(in.Unit)
 }
