@@ -62,5 +62,7 @@ func main() {
 
 	pollingServer.Shutdown()
 
+	poller.ShutdownPoller()
+
 	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
 }

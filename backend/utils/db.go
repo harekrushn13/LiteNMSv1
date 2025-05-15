@@ -20,17 +20,17 @@ func LoadDBConfig() DBConfig {
 
 	return DBConfig{
 
-		Host: getEnv("DB_HOST", "localhost"),
+		Host: getEnv("DB_HOST", GetDBHost()),
 
-		Port: getEnv("DB_PORT", "5432"),
+		Port: getEnv("DB_PORT", GetDBPort()),
 
-		User: getEnv("DB_USER", "postgres"),
+		User: getEnv("DB_USER", GetDBUser()),
 
-		Password: getEnv("DB_PASSWORD", "postgres"),
+		Password: getEnv("DB_PASSWORD", GetDBPassword()),
 
-		DBName: getEnv("DB_NAME", "LiteNMS"),
+		DBName: getEnv("DB_NAME", GetDBName()),
 
-		SSLMode: getEnv("DB_SSLMODE", "disable"),
+		SSLMode: getEnv("DB_SSLMODE", GetDBSSLMode()),
 	}
 }
 

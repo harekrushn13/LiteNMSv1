@@ -77,12 +77,12 @@ func (service *ProvisionService) HandleProvisioning(req ProvisionRequest) ([]Pro
 
 	for _, device := range req.Devices {
 
-		var objectID uint32
+		var provision Provision
 
 		err := tx.QueryRowx(`
-			SELECT object_id FROM provision 
+			SELECT object_id, is_provisioned FROM provision 
 			WHERE ip = $1 AND discovery_id = $2`,
-			device.IP, req.DiscoveryID).Scan(&objectID)
+			device.IP, req.DiscoveryID).Scan(&provision.ObjectID, &provision.IsProvisioned)
 
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 
@@ -96,20 +96,33 @@ func (service *ProvisionService) HandleProvisioning(req ProvisionRequest) ([]Pro
 			}
 		}
 
-		provision := Provision{
+		provision.IP = device.IP
 
-			IP: device.IP,
+		provision.CredentialID = device.CredentialID
 
-			CredentialID: device.CredentialID,
-
-			DiscoveryID: req.DiscoveryID,
-
-			IsProvisioned: false,
-		}
+		provision.DiscoveryID = req.DiscoveryID
 
 		if err == nil {
 
-			provision.ObjectID = objectID
+			provision.IsProvisioned = !provision.IsProvisioned
+
+			_, err = tx.Exec(`
+				UPDATE provision 
+				SET is_provisioned = $1 
+				WHERE object_id = $2`,
+				provision.IsProvisioned, provision.ObjectID)
+
+			if err != nil {
+
+				return nil, &APIError{
+
+					Code: http.StatusInternalServerError,
+
+					Message: "failed to update provision record",
+
+					Details: err.Error(),
+				}
+			}
 
 			provisionedDevices = append(provisionedDevices, provision)
 
@@ -176,9 +189,7 @@ func (service *ProvisionService) sendToPoller(devices []Provision) {
 
 			IP: device.IP,
 
-			CredentialID: device.CredentialID,
-
-			DiscoveryID: device.DiscoveryID,
+			IsProvisioned: device.IsProvisioned,
 
 			Username: cred.Username,
 

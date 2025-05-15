@@ -33,6 +33,13 @@ func main() {
 
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
+	if err := InitConfig(); err != nil {
+
+		Logger.Error("Failed to initialize config", zap.Error(err))
+
+		return
+	}
+
 	if err := InitDB(); err != nil {
 
 		Logger.Error("Failed to initialize database", zap.Error(err))
@@ -41,13 +48,6 @@ func main() {
 	}
 
 	defer DB.Close()
-
-	if err := InitConfig(); err != nil {
-
-		Logger.Error("Failed to initialize config", zap.Error(err))
-
-		return
-	}
 
 	deviceChannel := make(chan []PollerDevice, GetDeviceBuffer())
 
@@ -133,5 +133,5 @@ func main() {
 		log.Printf("Server shutdown failed: %v", err)
 	}
 
-	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
+	Logger.Info("ShutdownPoller complete", zap.Time("time", time.Now()))
 }

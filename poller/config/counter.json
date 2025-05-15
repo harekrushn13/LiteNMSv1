@@ -2,12 +2,12 @@
   "1": {
     "name": "qwe.asd.abc",
     "type": "uint64",
-    "polling": 1
+    "polling": 2
   },
   "2": {
     "name": "qwe.asd.pqr",
     "type": "float64",
-    "polling": 2
+    "polling": 1
   },
   "3": {
     "name": "qwe.asd.xyz",

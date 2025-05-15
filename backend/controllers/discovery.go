@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	. "backend/models"
 	. "backend/service"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -59,4 +60,20 @@ func (controller *DiscoveryController) StartDiscovery(context *gin.Context) {
 
 	context.JSON(http.StatusOK, result)
 
+}
+
+func (controller *DiscoveryController) GetDiscoveries(context *gin.Context) {
+
+	var discoveries []Discovery
+
+	err := controller.Service.DB.Select(&discoveries, `SELECT * FROM discovery_profile`)
+
+	if err != nil {
+
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	context.JSON(http.StatusOK, discoveries)
 }

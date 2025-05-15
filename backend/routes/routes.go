@@ -34,6 +34,8 @@ func InitRoutes(db *sqlx.DB, deviceChannel chan []PollerDevice, queryChannel cha
 
 		{
 			credentials.POST("/", credentialCtrl.CreateCredential)
+
+			credentials.GET("/", credentialCtrl.GetCredentials)
 		}
 
 		discoveries := v1.Group("/discoveries")
@@ -42,12 +44,16 @@ func InitRoutes(db *sqlx.DB, deviceChannel chan []PollerDevice, queryChannel cha
 			discoveries.POST("/", discoveryCtrl.CreateDiscovery)
 
 			discoveries.GET("/:id", discoveryCtrl.StartDiscovery)
+
+			discoveries.GET("/", discoveryCtrl.GetDiscoveries)
 		}
 
 		provisions := v1.Group("/provisions")
 
 		{
 			provisions.POST("/", provisionCtrl.ProvisionDevice)
+
+			provisions.GET("/:id", provisionCtrl.GetProvisionedDevices)
 		}
 
 		query := v1.Group("/query")

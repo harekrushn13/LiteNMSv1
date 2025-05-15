@@ -5,9 +5,7 @@ type PollerDevice struct {
 
 	IP string `msgpack:"ip" json:"ip"`
 
-	CredentialID uint16 `msgpack:"credential_id" json:"credential_id"`
-
-	DiscoveryID uint16 `msgpack:"discovery_id" json:"discovery_id"`
+	IsProvisioned bool `db:"is_provisioned" json:"is_provisioned"`
 
 	Username string `msgpack:"username" json:"username"`
 

@@ -18,11 +18,21 @@ type Poller struct {
 
 	workerChan chan *Task
 
-	shutdownChan chan struct{}
-
 	batchInterval time.Duration
 
 	numWorkers int
+
+	Shutdown
+}
+
+type Shutdown struct {
+	shutdownWorker chan bool
+
+	shutdownScheduler chan bool
+
+	shutdownBatcher chan bool
+
+	shutdownDevice chan bool
 }
 
 func NewPoller() *Poller {
@@ -35,11 +45,19 @@ func NewPoller() *Poller {
 
 		workerChan: make(chan *Task, GetWorkBuffer()),
 
-		shutdownChan: make(chan struct{}),
-
 		batchInterval: time.Duration(GetBatchInterval()) * time.Millisecond,
 
 		numWorkers: GetWorkerCount(),
+
+		Shutdown: Shutdown{
+			shutdownWorker: make(chan bool, 1),
+
+			shutdownScheduler: make(chan bool, 1),
+
+			shutdownBatcher: make(chan bool, 1),
+
+			shutdownDevice: make(chan bool, 1),
+		},
 	}
 }
 
@@ -66,7 +84,15 @@ func (poller *Poller) startScheduler() {
 
 		select {
 
-		case <-poller.shutdownChan:
+		case <-poller.shutdownScheduler:
+
+			poller.taskLock.Lock()
+
+			poller.taskQueue = poller.taskQueue[:0]
+
+			poller.taskLock.Unlock()
+
+			poller.shutdownScheduler <- true
 
 			return
 
@@ -122,6 +148,14 @@ func (poller *Poller) batchEvents(eventChannel chan Events, dataChannel chan []E
 
 		select {
 
+		case <-poller.shutdownBatcher:
+
+			batchTicker.Stop()
+
+			poller.shutdownBatcher <- true
+
+			return
+
 		case event := <-eventChannel:
 
 			batch = append(batch, event)
@@ -136,4 +170,24 @@ func (poller *Poller) batchEvents(eventChannel chan Events, dataChannel chan []E
 			}
 		}
 	}
+}
+
+func (poller *Poller) ShutdownPoller() {
+
+	poller.shutdownDevice <- true
+
+	poller.shutdownScheduler <- true
+
+	poller.shutdownWorker <- true
+
+	poller.shutdownBatcher <- true
+
+	<-poller.shutdownDevice
+
+	<-poller.shutdownScheduler
+
+	<-poller.shutdownWorker
+
+	<-poller.shutdownBatcher
+
 }

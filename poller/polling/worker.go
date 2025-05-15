@@ -24,11 +24,20 @@ func (poller *Poller) startWorker(eventChannel chan Events) {
 
 		select {
 
-		case <-poller.shutdownChan:
+		case <-poller.shutdownWorker:
+
+			close(poller.workerChan)
+
+			poller.shutdownWorker <- true
 
 			return
 
 		case task := <-poller.workerChan:
+
+			if task == nil {
+
+				continue
+			}
 
 			poller.pollCounter(task.CounterID, eventChannel, pollDevicePool)
 		}
