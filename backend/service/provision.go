@@ -160,6 +160,45 @@ func (service *ProvisionService) HandleProvisioning(req ProvisionRequest) ([]Pro
 	return provisionedDevices, nil
 }
 
+func (service *ProvisionService) GetProvisionedDevices(discoveryID string) (interface{}, *APIError) {
+
+	var exists bool
+
+	err := service.DB.Get(&exists, `SELECT EXISTS(SELECT 1 FROM discovery_profile WHERE discovery_id = $1)`, discoveryID)
+
+	if err != nil {
+
+		return nil, &APIError{Code: http.StatusInternalServerError, Message: "failed to query discovery", Details: err.Error()}
+	}
+
+	if !exists {
+
+		return nil, &APIError{Code: http.StatusNotFound, Message: "discovery not found"}
+	}
+
+	var devices []struct {
+		ObjectID uint32 `db:"object_id" json:"object_id"`
+
+		IP string `db:"ip" json:"ip"`
+
+		CredentialID uint16 `db:"credential_id" json:"credential_id"`
+
+		IsProvisioned bool `db:"is_provisioned" json:"is_provisioned"`
+	}
+
+	err = service.DB.Select(&devices, `
+		SELECT object_id, ip, credential_id, is_provisioned 
+		FROM provision 
+		WHERE discovery_id = $1`, discoveryID)
+
+	if err != nil {
+
+		return nil, &APIError{Code: http.StatusInternalServerError, Message: "failed to fetch provisioned devices", Details: err.Error()}
+	}
+
+	return devices, nil
+}
+
 func getCredentialIDs(devices []ProvisionDevice) []uint16 {
 
 	ids := make([]uint16, len(devices))

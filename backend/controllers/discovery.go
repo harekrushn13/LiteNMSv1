@@ -77,3 +77,33 @@ func (controller *DiscoveryController) GetDiscoveries(context *gin.Context) {
 
 	context.JSON(http.StatusOK, discoveries)
 }
+
+func (controller *DiscoveryController) UpdateDiscovery(context *gin.Context) {
+
+	discoveryID := context.Param("id")
+
+	var request DiscoveryRequest
+
+	if err := context.ShouldBindJSON(&request); err != nil {
+
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	err := controller.Service.UpdateDiscovery(discoveryID, request)
+
+	if err != nil {
+
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	context.JSON(http.StatusOK, gin.H{
+
+		"discovery_id": discoveryID,
+
+		"message": "Discovery updated successfully",
+	})
+}

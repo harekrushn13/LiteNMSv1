@@ -46,17 +46,7 @@ func (controller *CredentialController) CreateCredential(context *gin.Context) {
 
 func (controller *CredentialController) GetCredentials(context *gin.Context) {
 
-	var credentials []struct {
-		CredentialID uint16 `db:"credential_id" json:"credential_id"`
-
-		Username string `db:"username" json:"username"`
-
-		Password string `db:"password" json:"password"`
-
-		Port uint16 `db:"port" json:"port"`
-	}
-
-	err := controller.Service.DB.Select(&credentials, `SELECT credential_id, username, password, port FROM credential_profile`)
+	credentials, err := controller.Service.GetCredentials()
 
 	if err != nil {
 
@@ -66,4 +56,29 @@ func (controller *CredentialController) GetCredentials(context *gin.Context) {
 	}
 
 	context.JSON(http.StatusOK, credentials)
+}
+
+func (controller *CredentialController) UpdateCredential(context *gin.Context) {
+
+	credentialID := context.Param("id")
+
+	var credential Credential
+
+	if err := context.ShouldBindJSON(&credential); err != nil {
+
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	err := controller.Service.UpdateCredential(credentialID, &credential)
+
+	if err != nil {
+
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	context.JSON(http.StatusOK, gin.H{"message": "Credential updated successfully"})
 }

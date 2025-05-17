@@ -119,50 +119,36 @@ func (service *DiscoveryService) StartDiscovery(id string) (map[string]interface
 	}, nil
 }
 
-func validateDiscoveryInput(req DiscoveryRequest) error {
+func (service *DiscoveryService) UpdateDiscovery(discoveryID string, req DiscoveryRequest) error {
 
-	if req.IP == "" && req.IPRange == "" {
+	if err := validateDiscoveryInput(req); err != nil {
 
-		return fmt.Errorf("either ip or ip_range must be provided")
+		return err
 	}
 
-	if req.IP != "" && req.IPRange != "" {
+	var count int
 
-		return fmt.Errorf("provide either ip or ip_range, not both")
+	query := "SELECT COUNT(*) FROM credential_profile WHERE credential_id = ANY($1)"
+
+	err := service.DB.Get(&count, query, pq.Array(req.CredentialIDs))
+
+	if err != nil || count != len(req.CredentialIDs) {
+
+		return fmt.Errorf("some credential IDs are invalid")
 	}
 
-	if req.IP != "" && net.ParseIP(req.IP) == nil {
+	query = `UPDATE discovery_profile 
+	         SET credential_id = $1, ip = $2, ip_range = $3, updated_at = NOW() 
+	         WHERE discovery_id = $4`
 
-		return fmt.Errorf("invalid ip format")
-
-	}
-
-	if req.IPRange != "" {
-
-		if _, _, err := net.ParseCIDR(req.IPRange); err != nil {
-
-			return fmt.Errorf("invalid ip_range format")
-		}
-	}
-
-	return nil
-}
-
-func generateIPs(discovery Discovery) ([]string, error) {
-
-	if discovery.IP != "" {
-
-		return []string{discovery.IP}, nil
-	}
-
-	_, ipNet, err := net.ParseCIDR(discovery.IPRange)
+	_, err = service.DB.Exec(query, pq.Array(req.CredentialIDs), req.IP, req.IPRange, discoveryID)
 
 	if err != nil {
 
-		return nil, err
+		return fmt.Errorf("failed to update discovery: %w", err)
 	}
 
-	return getAllIps(ipNet)
+	return nil
 }
 
 func runDiscovery(allIPs []string, credentials []Credential) []map[string]interface{} {
@@ -260,6 +246,76 @@ func runDiscovery(allIPs []string, credentials []Credential) []map[string]interf
 	}
 
 	return discoveredDevices
+}
+
+func validateDiscoveryInput(req DiscoveryRequest) error {
+
+	if req.IP == "" && req.IPRange == "" {
+
+		return fmt.Errorf("either ip or ip_range must be provided")
+	}
+
+	if req.IP != "" && req.IPRange != "" {
+
+		return fmt.Errorf("provide either ip or ip_range, not both")
+	}
+
+	if req.IP != "" && net.ParseIP(req.IP) == nil {
+
+		return fmt.Errorf("invalid ip format")
+
+	}
+
+	if req.IPRange != "" {
+
+		if _, _, err := net.ParseCIDR(req.IPRange); err != nil {
+
+			return fmt.Errorf("invalid ip_range format")
+		}
+	}
+
+	if len(req.CredentialIDs) != len(checkUniqueIDs(req.CredentialIDs)) {
+
+		return fmt.Errorf("credential_ids must contain unique values")
+	}
+
+	return nil
+}
+
+func checkUniqueIDs(ids []uint16) []uint16 {
+
+	seen := make(map[uint16]bool)
+
+	var result []uint16
+
+	for _, id := range ids {
+
+		if !seen[id] {
+
+			seen[id] = true
+
+			result = append(result, id)
+		}
+	}
+
+	return result
+}
+
+func generateIPs(discovery Discovery) ([]string, error) {
+
+	if discovery.IP != "" {
+
+		return []string{discovery.IP}, nil
+	}
+
+	_, ipNet, err := net.ParseCIDR(discovery.IPRange)
+
+	if err != nil {
+
+		return nil, err
+	}
+
+	return getAllIps(ipNet)
 }
 
 func getAllIps(ipNet *net.IPNet) ([]string, error) {

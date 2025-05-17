@@ -49,32 +49,11 @@ func (controller *ProvisionController) GetProvisionedDevices(context *gin.Contex
 
 	discoveryID := context.Param("id")
 
-	var discovery interface{}
-
-	err := controller.service.DB.Get(&discovery, `SELECT discovery_id FROM discovery_profile WHERE discovery_id = $1`, discoveryID)
+	devices, err := controller.service.GetProvisionedDevices(discoveryID)
 
 	if err != nil {
 
-		context.JSON(http.StatusNotFound, gin.H{"error": "discovery not found"})
-
-		return
-	}
-
-	var devices []struct {
-		ObjectID uint32 `db:"object_id" json:"object_id"`
-
-		IP string `db:"ip" json:"ip"`
-
-		CredentialID uint16 `db:"credential_id" json:"credential_id"`
-
-		IsProvisioned bool `db:"is_provisioned" json:"is_provisioned"`
-	}
-
-	err = controller.service.DB.Select(&devices, `SELECT object_id, ip, credential_id, is_provisioned FROM provision WHERE discovery_id = $1`, discoveryID)
-
-	if err != nil {
-
-		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		context.JSON(err.Code, gin.H{"error": err.Message, "details": err.Details})
 
 		return
 	}
