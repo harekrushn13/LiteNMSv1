@@ -1,11 +1,14 @@
 package server
 
 import (
+	. "backend/logger"
 	. "backend/utils"
 	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
-	"log"
+	"github.com/vmihailenco/msgpack/v5"
+	"go.uber.org/zap"
+	"sync"
 )
 
 type QueryServer struct {
@@ -18,6 +21,10 @@ type QueryServer struct {
 	shutdownPull chan bool
 
 	shutdownPush chan bool
+
+	queryMapping map[uint64]chan Response
+
+	lock sync.RWMutex
 }
 
 func NewQueryServer(queryChannel chan QueryMap, queryMapping map[uint64]chan Response) (*QueryServer, error) {
@@ -37,6 +44,8 @@ func NewQueryServer(queryChannel chan QueryMap, queryMapping map[uint64]chan Res
 
 		return nil, fmt.Errorf("failed to create PUSH socket: %v", err)
 	}
+
+	pushSocket.SetLinger(0)
 
 	if err := pushSocket.Connect("tcp://localhost:6004"); err != nil {
 
@@ -80,16 +89,20 @@ func NewQueryServer(queryChannel chan QueryMap, queryMapping map[uint64]chan Res
 		shutdownPull: make(chan bool, 1),
 
 		shutdownPush: make(chan bool, 1),
+
+		queryMapping: make(map[uint64]chan Response),
+
+		lock: sync.RWMutex{},
 	}
 
-	go server.querySender(queryChannel, queryMapping)
+	go server.querySender(queryChannel)
 
-	go server.responseReceiver(queryMapping)
+	go server.responseReceiver()
 
 	return server, nil
 }
 
-func (server *QueryServer) querySender(queryChannel chan QueryMap, queryMapping map[uint64]chan Response) {
+func (server *QueryServer) querySender(queryChannel chan QueryMap) {
 
 	for {
 
@@ -114,28 +127,32 @@ func (server *QueryServer) querySender(queryChannel chan QueryMap, queryMapping 
 				QueryRequest: queryMap.QueryRequest,
 			}
 
-			queryBytes, err := json.Marshal(querySend)
+			queryBytes, err := msgpack.Marshal(querySend)
 
 			if err != nil {
 
-				log.Printf("querySender: failed to marshal query: %v", err)
+				Logger.Warn("querySender: failed to marshal query", zap.Error(err))
 
 				continue
 			}
 
 			if _, err := server.pushSocket.SendBytes(queryBytes, 0); err != nil {
 
-				log.Printf("querySender: failed to send query: %v", err)
+				Logger.Warn("querySender: failed to send query", zap.Error(err))
 
 				continue
 			}
 
-			queryMapping[querySend.RequestID] = queryMap.Response
+			server.lock.Lock()
+
+			server.queryMapping[querySend.RequestID] = queryMap.Response
+
+			server.lock.Unlock()
 		}
 	}
 }
 
-func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Response) {
+func (server *QueryServer) responseReceiver() {
 
 	for {
 
@@ -144,6 +161,17 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 		case <-server.shutdownPull:
 
 			server.pullSocket.Close()
+
+			server.lock.Lock()
+
+			for id, ch := range server.queryMapping {
+
+				ch <- Response{RequestID: id, Error: "Server shutdown"}
+
+				close(ch)
+			}
+
+			server.lock.Unlock()
 
 			server.shutdownPull <- true
 
@@ -155,7 +183,7 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 
 			if err != nil {
 
-				log.Printf("responseReceiver: Error receiving response: %v", err)
+				Logger.Warn("responseReceiver: Error receiving response", zap.Error(err))
 
 				continue
 			}
@@ -164,17 +192,23 @@ func (server *QueryServer) responseReceiver(queryMapping map[uint64]chan Respons
 
 			if err := json.Unmarshal(data, &response); err != nil {
 
-				log.Printf("responseReceiver: Error unmarshaling response: %v", err)
+				Logger.Warn("responseReceiver: Error unmarshalling response", zap.Error(err))
 
 				continue
 			}
 
-			if ch, ok := queryMapping[response.RequestID]; ok {
+			server.lock.Lock()
+
+			if ch, ok := server.queryMapping[response.RequestID]; ok {
 
 				ch <- response
 
-				delete(queryMapping, response.RequestID)
+				delete(server.queryMapping, response.RequestID)
+
+				close(ch)
 			}
+
+			server.lock.Unlock()
 		}
 	}
 }
@@ -190,4 +224,5 @@ func (server *QueryServer) Shutdown() {
 	<-server.shutdownPull
 
 	<-server.shutdownPush
+
 }

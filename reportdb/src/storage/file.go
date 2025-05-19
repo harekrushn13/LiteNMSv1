@@ -3,8 +3,9 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
+	"go.uber.org/zap"
 	"os"
+	. "reportdb/logger"
 	. "reportdb/utils"
 	"strconv"
 	"sync"
@@ -192,13 +193,14 @@ func (fileManager *FileManager) Close() {
 
 			if err := syscall.Munmap(handle.mappedBuffer); err != nil {
 
-				log.Printf("fileManager.Close munmap error: %v", err)
+				Logger.Error("FileManager: munmap failed during close", zap.Error(err))
+
 			}
 		}
 
 		if err := handle.file.Close(); err != nil {
 
-			log.Printf("fileManager.Close file close error: %v", err)
+			Logger.Error("FileManager: file close failed", zap.Error(err))
 		}
 
 	}

@@ -2,13 +2,17 @@ package main
 
 import (
 	"fmt"
+	"github.com/bytedance/gopkg/util/gctuner"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	. "reportdb/cache"
 	. "reportdb/datastore/reader"
 	. "reportdb/datastore/writer"
+	. "reportdb/logger"
 	. "reportdb/server"
 	. "reportdb/storage"
 	. "reportdb/utils"
@@ -39,9 +43,31 @@ func main() {
 				runtime.ReadMemStats(&stat)
 
 				log.Printf("NumGC: %v  GCCPUFraction : %v", stat.NumGC, stat.GCCPUFraction)
+
+				hit, missed, hitratio := GetMetrics()
+
+				log.Printf("hit: %v, missed: %v, hitratio: %v", hit, missed, hitratio)
 			}
 		}
 	}()
+
+	if err := InitLogger(); err != nil {
+
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+
+		return
+	}
+
+	defer Logger.Sync()
+
+	gctuner.Tuning(uint64(float64(SysTotalMemory()) * 0.5))
+
+	if err := InitCache(); err != nil {
+
+		Logger.Error("Failed to initialize cache", zap.Error(err))
+
+		return
+	}
 
 	signalChannel := make(chan os.Signal, 1)
 
@@ -51,7 +77,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Error initializing config: %v", err)
+		Logger.Error("Error initializing config", zap.Error(err))
 
 		return
 	}
@@ -62,7 +88,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Error initializing ZMQ queryServer: %v", err)
+		Logger.Error("Error initializing ZMQ queryServer", zap.Error(err))
 
 		return
 	}
@@ -73,7 +99,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Error starting writers: %v", err)
+		Logger.Error("Error starting writers", zap.Error(err))
 
 		return
 	}
@@ -86,7 +112,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Error starting readers: %v", err)
+		Logger.Error("Error starting readers", zap.Error(err))
 
 		return
 	}
@@ -97,7 +123,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Failed to start queryServer: %v", err)
+		Logger.Error("Failed to start queryServer", zap.Error(err))
 
 		return
 	}
@@ -108,14 +134,14 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("Error initializing store pool: %v", err)
+		Logger.Error("Error initializing store pool", zap.Error(err))
 
 		return
 	}
 
 	<-signalChannel
 
-	fmt.Println("\nstart shutting down : ", time.Now())
+	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
 
 	pollingServer.Shutdown()
 
@@ -123,5 +149,6 @@ func main() {
 
 	storePool.Shutdown()
 
-	fmt.Println("\nshutdown", time.Now())
+	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
+
 }

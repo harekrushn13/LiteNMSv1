@@ -1,5 +1,11 @@
 {
   "deviceBuffer": 5,
   "dataBuffer": 5,
-  "queryBuffer": 50
+  "queryBuffer": 50,
+  "dbHost": "localhost",
+  "dbPort": "5432",
+  "dbUser": "postgres",
+  "dbPassword": "postgres",
+  "dbName": "LiteNMS",
+  "dbSSLMode": "disable"
 }

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/pebbe/zmq4"
-	"log"
+	"github.com/vmihailenco/msgpack/v5"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/utils"
 )
 
@@ -57,6 +59,8 @@ func NewQueryServer(queryChannel chan QueryReceive, resultChannel chan Response)
 
 		return nil, fmt.Errorf("failed to create PUSH socket: %v", err)
 	}
+
+	pushSocket.SetLinger(0)
 
 	if err := pushSocket.Bind("tcp://*:6005"); err != nil {
 
@@ -111,16 +115,16 @@ func (queryServer *QueryServer) queryReceiver(queryChannel chan QueryReceive) {
 
 			if err != nil {
 
-				log.Printf("queryReceiver : Error receiving query: %v", err)
+				Logger.Warn("queryReceiver : Error receiving query", zap.Error(err))
 
 				continue
 			}
 
 			var query QueryReceive
 
-			if err := json.Unmarshal(msg, &query); err != nil {
+			if err := msgpack.Unmarshal(msg, &query); err != nil {
 
-				log.Printf("queryReceiver : Error unmarshaling query: %v", err)
+				Logger.Warn("queryReceiver : Error unmarshalling query", zap.Error(err))
 
 				return
 			}
@@ -152,22 +156,18 @@ func (queryServer *QueryServer) responseSender(resultChannel chan Response) {
 
 			if err != nil {
 
-				log.Printf("responseSender : Error marshaling response: %v", err)
+				Logger.Warn("responseSender : Error marshaling response", zap.Error(err))
 
 				return
 			}
 
 			if _, err := queryServer.pushSocket.SendBytes(responseBytes, 0); err != nil {
 
-				log.Printf("responseSender : Error sending response: %v", err)
+				Logger.Warn("responseSender : Error sending response", zap.Error(err))
 
 				return
 			}
 
-			if response.Error == "" {
-
-				fmt.Println("response given :", response.RequestID)
-			}
 		}
 	}
 }

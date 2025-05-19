@@ -1,7 +1,8 @@
 package reader
 
 import (
-	"log"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/utils"
 )
 
@@ -19,7 +20,11 @@ func DistributeQuery(queryChannel chan QueryReceive, readers []*Reader) {
 
 			if index >= numReaders || index < 0 {
 
-				log.Printf("DistributeQuery error : Query index is out of range")
+				Logger.Warn("DistributeQuery : Query index is out of range",
+					zap.Uint8("index", index),
+					zap.Uint8("numReaders", numReaders),
+					zap.Uint64("RequestID", query.RequestID),
+				)
 
 				continue
 			}

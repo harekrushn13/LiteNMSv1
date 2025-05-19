@@ -16,6 +16,10 @@ type Configuration struct {
 	EventBuffer int `json:"eventBuffer"`
 
 	BatchInterval int `json:"batchInterval"`
+
+	PollDeviceBuffer int `json:"pollDeviceBuffer"`
+
+	WorkBuffer int `json:"workBuffer"`
 }
 
 var config Configuration
@@ -119,9 +123,19 @@ func GetWorkerCount() int {
 	return config.Workers
 }
 
+func GetWorkBuffer() int {
+
+	return config.WorkBuffer
+}
+
 func GetEventBuffer() int {
 
 	return config.EventBuffer
+}
+
+func GetPollDeviceBuffer() int {
+
+	return config.PollDeviceBuffer
 }
 
 func GetBatchInterval() int {

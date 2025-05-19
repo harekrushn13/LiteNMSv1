@@ -11,7 +11,7 @@ import (
 
 func getPath(workingDirectory string, row Events) string {
 
-	day := time.Unix(int64(row.Timestamp), 0).Truncate(24 * time.Hour).UTC()
+	day := time.Unix(int64(row.Timestamp), 0).Truncate(24 * time.Hour).Local()
 
 	return workingDirectory + "/database/" + day.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(row.CounterId))
 }
@@ -29,7 +29,7 @@ func encodeData(row Events, data *[]byte) (uint8, error) {
 
 	case TypeUint64:
 
-		val, ok := row.Value.(float64)
+		val, ok := row.Value.(uint64)
 
 		if !ok {
 

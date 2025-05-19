@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"go.uber.org/zap"
 	"os"
 	"os/signal"
+	. "poller/logger"
 	. "poller/polling"
 	. "poller/server"
 	. "poller/utils"
@@ -14,6 +15,15 @@ import (
 
 func main() {
 
+	if err := InitLogger(); err != nil {
+
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+
+		return
+	}
+
+	defer Logger.Sync()
+
 	signalChannel := make(chan os.Signal, 1)
 
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
@@ -22,7 +32,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("InitConfig error: %v", err)
+		Logger.Error("InitConfig error", zap.Error(err))
 
 		return
 	}
@@ -35,7 +45,7 @@ func main() {
 
 	if err != nil {
 
-		log.Printf("NewPollingServer error: %v", err)
+		Logger.Error("NewPollingServer error", zap.Error(err))
 
 		return
 	}
@@ -48,9 +58,11 @@ func main() {
 
 	<-signalChannel
 
-	fmt.Println("\nstart shutting down : ", time.Now())
+	Logger.Info("Start shutting down", zap.Time("time", time.Now()))
 
 	pollingServer.Shutdown()
 
-	fmt.Println("\nshutdown", time.Now())
+	poller.ShutdownPoller()
+
+	Logger.Info("Shutdown complete", zap.Time("time", time.Now()))
 }

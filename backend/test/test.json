@@ -1,0 +1,186 @@
+[
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "AVG",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "SUM",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MAX",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MIN",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "AVG",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "SUM",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MAX",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MIN",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "AVG",
+    "group_by_objects": false
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "SUM",
+    "group_by_objects": false
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MAX",
+    "group_by_objects": false
+  },
+  {
+    "counter_id": 2,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MIN",
+    "group_by_objects": false
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "AVG",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "SUM",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MAX",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MIN",
+    "group_by_objects": true,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "AVG",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "SUM",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MAX",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MIN",
+    "group_by_objects": false,
+    "interval": 86400
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "AVG",
+    "group_by_objects": false
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "SUM",
+    "group_by_objects": false
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MAX",
+    "group_by_objects": false
+  },
+  {
+    "counter_id": 1,
+    "from": 1744860600,
+    "to": 1746761400,
+    "aggregation": "MIN",
+    "group_by_objects": false
+  }
+]

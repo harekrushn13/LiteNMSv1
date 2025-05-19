@@ -14,33 +14,55 @@ func (poller *Poller) SetProvisionedDevices(deviceChannel chan []Device) {
 
 			select {
 
+			case <-poller.shutdownDevice:
+
+				poller.shutdownDevice <- true
+
+				return
+
 			case newDevices := <-deviceChannel:
 
 				poller.devicesLock.Lock()
 
 				counters := GetAllCounters()
 
+				newDeviceMap := make(map[string]Device)
+
+				for _, device := range newDevices {
+
+					newDeviceMap[device.IP] = device
+				}
+
 				for counterID := range counters {
 
-					for _, newDevice := range newDevices {
+					updatedDevices := make([]Device, 0)
 
-						exists := false
+					// check and add for an existing device
 
-						for _, existingDevice := range poller.devices[counterID] {
+					for _, device := range poller.devices[counterID] {
 
-							if existingDevice == newDevice {
+						if newDevice, found := newDeviceMap[device.IP]; found && !newDevice.IsProvisioned {
 
-								exists = true
-
-								break
-							}
+							continue
 						}
 
-						if !exists {
+						updatedDevices = append(updatedDevices, device)
 
-							poller.devices[counterID] = append(poller.devices[counterID], newDevice)
-						}
 					}
+
+					// check and add for a new device
+
+					for _, device := range newDeviceMap {
+
+						if !device.IsProvisioned {
+
+							continue
+						}
+
+						updatedDevices = append(updatedDevices, device)
+					}
+
+					poller.devices[counterID] = updatedDevices
 				}
 
 				poller.devicesLock.Unlock()

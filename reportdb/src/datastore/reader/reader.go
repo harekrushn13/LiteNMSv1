@@ -2,18 +2,17 @@ package reader
 
 import (
 	"fmt"
-	"log"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/storage"
 	. "reportdb/utils"
-	"strconv"
 	"sync"
-	"time"
 )
 
 type Reader struct {
 	id uint8
 
-	dayPool chan struct{} // to read multiple day in parallel for query
+	objectPool chan struct{} // to read multiple day in parallel for a query
 
 	queryEvents chan QueryReceive // channel to take query from query distributor
 
@@ -21,19 +20,29 @@ type Reader struct {
 
 	storePool *StorePool
 
-	waitGroup *sync.WaitGroup // to wait completion of all reader
+	waitGroup *sync.WaitGroup // to wait completion of all readers
 
-	dayResultMapping map[string]map[uint32][]DataPoint // keep day-result mapping for caching counter_id-object_id
+	objectsMapping map[string][]uint32 // useful when no objectId given in a query
 
 	results map[uint32][]DataPoint // result of query
 
-	lock *sync.RWMutex
+	ParserBuffer
 }
 
-type DataPoint struct {
-	Timestamp uint32 `json:"timestamp"`
+type ParserBuffer struct {
+	dataValues []interface{}
 
-	Value interface{} `json:"value"`
+	getDataValues []interface{}
+
+	dataPoints []DataPoint
+
+	allDataPoints []DataPoint
+
+	grid map[uint32]interface{} // map[objectID]->value
+
+	bucketed map[uint32][]DataPoint // map[objectID]->[]DataPoint
+
+	bucketMap map[uint32][]interface{} // map[timestamp]->[values]
 }
 
 func StartReaders(storePool *StorePool, resultChannel chan Response) ([]*Reader, error) {
@@ -63,7 +72,7 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			id: uint8(i),
 
-			dayPool: make(chan struct{}, GetDayWorkers()),
+			objectPool: make(chan struct{}, GetObjectWorkers()),
 
 			queryEvents: make(chan QueryReceive, GetQueryBuffer()),
 
@@ -73,17 +82,33 @@ func initializeReaders(storePool *StorePool, resultChannel chan Response) ([]*Re
 
 			waitGroup: &sync.WaitGroup{},
 
-			dayResultMapping: make(map[string]map[uint32][]DataPoint),
+			objectsMapping: make(map[string][]uint32),
 
 			results: make(map[uint32][]DataPoint),
 
-			lock: &sync.RWMutex{},
+			ParserBuffer: ParserBuffer{
+
+				dataValues: make([]interface{}, 0, 100),
+
+				getDataValues: make([]interface{}, 0, 100),
+
+				dataPoints: make([]DataPoint, 0, 100),
+
+				allDataPoints: make([]DataPoint, 0, 100),
+
+				grid: make(map[uint32]interface{}),
+
+				bucketed: make(map[uint32][]DataPoint),
+
+				bucketMap: make(map[uint32][]interface{}),
+			},
 		}
 
-		for j := 0; j < GetDayWorkers(); j++ {
+		for j := 0; j < GetObjectWorkers(); j++ {
 
-			readers[i].dayPool <- struct{}{}
+			readers[i].objectPool <- struct{}{}
 		}
+
 	}
 
 	return readers, nil
@@ -99,11 +124,11 @@ func (reader *Reader) runReader() {
 
 		for query := range reader.queryEvents {
 
-			results, err := reader.FetchData(query.Query)
+			err := reader.FetchData(query.Query)
 
 			if err != nil {
 
-				log.Printf("Error fetching data from reader: %v", err)
+				Logger.Error("Error fetching data from reader", zap.Error(err))
 
 				response := Response{
 
@@ -113,13 +138,17 @@ func (reader *Reader) runReader() {
 				}
 
 				reader.resultChannel <- response
+
+				continue
 			}
 
-			parseResult, err := ParseResult(results, query.Query)
+			parseResult, err := reader.ParseResult(query.Query)
 
 			var response Response
 
 			if err != nil {
+
+				Logger.Error("Error fetching data from reader", zap.Error(err))
 
 				response = Response{
 
@@ -153,132 +182,4 @@ func ShutdownReaders(readers []*Reader) {
 		reader.waitGroup.Wait()
 	}
 
-}
-
-func (reader *Reader) FetchData(query Query) (map[uint32][]DataPoint, error) {
-
-	dataType, err := GetCounterType(query.CounterID)
-
-	if err != nil {
-
-		return nil, fmt.Errorf("reader.fetchData error : %v", err)
-	}
-
-	fromTime := time.Unix(int64(query.From), 0).Truncate(24 * time.Hour).UTC()
-
-	toTime := time.Unix(int64(query.To), 0).Truncate(24 * time.Hour).UTC()
-
-	workingDirectory := GetWorkingDirectory()
-
-	wg := &sync.WaitGroup{}
-
-	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
-
-		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
-
-		for _, ObjectId := range query.ObjectIDs {
-
-			reader.lock.RLock()
-
-			if _, exists := reader.dayResultMapping[path][ObjectId]; exists && !reader.storePool.CheckEngineUsedPut(path) && current.After(fromTime) && current.Before(toTime) {
-
-				continue
-			}
-
-			reader.lock.RUnlock()
-
-			<-reader.dayPool
-
-			wg.Add(1)
-
-			go func(path string) {
-
-				defer func() {
-
-					wg.Done()
-
-					reader.dayPool <- struct{}{}
-				}()
-
-				store, err := reader.storePool.GetEngine(path, false)
-
-				if err != nil {
-
-					log.Printf("reader.fetchData error : %v", err)
-
-					return
-				}
-
-				dayResult, err := store.Get(ObjectId, query.From, query.To)
-
-				if err != nil {
-
-					log.Printf("store.Get error %s, %s", current.Format("2006/01/02"), err)
-
-					return
-
-				}
-
-				var decodeDayResult []DataPoint
-
-				decodeData(dayResult, dataType, &decodeDayResult)
-
-				reader.lock.Lock()
-
-				objectsMap, exists := reader.dayResultMapping[path]
-
-				if !exists {
-
-					objectsMap = make(map[uint32][]DataPoint)
-
-					reader.dayResultMapping[path] = objectsMap
-				}
-
-				reader.dayResultMapping[path][ObjectId] = decodeDayResult
-
-				reader.lock.Unlock()
-
-				return
-
-			}(path)
-
-		}
-
-	}
-
-	wg.Wait()
-
-	reader.lock.Lock()
-
-	reader.results = make(map[uint32][]DataPoint)
-
-	for current := fromTime; !current.After(toTime); current = current.AddDate(0, 0, 1) {
-
-		path := workingDirectory + "/database/" + current.Format("2006/01/02") + "/counter_" + strconv.Itoa(int(query.CounterID))
-
-		for _, ObjectId := range query.ObjectIDs {
-
-			if data, exists := reader.dayResultMapping[path][ObjectId]; exists {
-
-				if len(data) > 0 {
-
-					reader.results[ObjectId] = data
-				}
-
-				if !current.After(fromTime) || !current.Before(toTime) {
-
-					delete(reader.dayResultMapping[path], ObjectId)
-				}
-			}
-		}
-	}
-
-	reader.lock.Unlock()
-
-	if len(reader.results) == 0 {
-
-		return nil, fmt.Errorf("no data found in time range %d-%d", query.From, query.To)
-	}
-
-	return reader.results, nil
 }

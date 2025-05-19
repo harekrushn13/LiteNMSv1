@@ -12,6 +12,18 @@ type Configuration struct {
 	DataBuffer int `json:"dataBuffer"`
 
 	QueryBuffer int `json:"queryBuffer"`
+
+	DbHost string `json:"dbHost"`
+
+	DbPort string `json:"dbPort"`
+
+	DbUser string `json:"dbUser"`
+
+	DbPassword string `json:"dbPassword"`
+
+	DbName string `json:"dbName"`
+
+	DbSSLMode string `json:"dbSSLMode"`
 }
 
 var config Configuration
@@ -55,4 +67,34 @@ func GetDataBuffer() int {
 func GetQueryBuffer() int {
 
 	return config.QueryBuffer
+}
+
+func GetDBHost() string {
+
+	return config.DbHost
+}
+
+func GetDBPort() string {
+
+	return config.DbPort
+}
+
+func GetDBUser() string {
+
+	return config.DbUser
+}
+
+func GetDBPassword() string {
+
+	return config.DbPassword
+}
+
+func GetDBName() string {
+
+	return config.DbName
+}
+
+func GetDBSSLMode() string {
+
+	return config.DbSSLMode
 }

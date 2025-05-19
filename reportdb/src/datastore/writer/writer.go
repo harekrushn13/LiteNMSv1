@@ -2,7 +2,8 @@ package writer
 
 import (
 	"fmt"
-	"log"
+	"go.uber.org/zap"
+	. "reportdb/logger"
 	. "reportdb/storage"
 	. "reportdb/utils"
 	"sync"
@@ -74,18 +75,26 @@ func (writer *Writer) runWriter(workingDirectory string) {
 
 			if err != nil {
 
-				log.Printf("writer.runWriter : Error getting store: %v", err)
+				Logger.Error("Writer: error getting store",
+					zap.Uint8("writer_id", writer.id),
+					zap.Uint32("object_id", row.ObjectId),
+					zap.Uint16("counter_id", row.CounterId),
+					zap.Error(err),
+				)
 
 				continue
 			}
-
-			//writer.data = writer.data[:0]
 
 			lastIndex, err := encodeData(row, &writer.data)
 
 			if err != nil {
 
-				log.Printf("writer.runWriter : failed to encode data: %s", err)
+				Logger.Error("Writer: failed to encode data",
+					zap.Uint8("writer_id", writer.id),
+					zap.Uint32("object_id", row.ObjectId),
+					zap.Uint16("counter_id", row.CounterId),
+					zap.Error(err),
+				)
 
 				continue
 			}
@@ -94,7 +103,13 @@ func (writer *Writer) runWriter(workingDirectory string) {
 
 			if err != nil {
 
-				log.Printf("writer.runWriter : failed to write data: %s", err)
+				Logger.Error("Writer: failed to write data",
+					zap.Uint8("writer_id", writer.id),
+					zap.Uint32("object_id", row.ObjectId),
+					zap.Uint16("counter_id", row.CounterId),
+					zap.Uint8("data_bytes", lastIndex),
+					zap.Error(err),
+				)
 
 				continue
 			}

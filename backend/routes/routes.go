@@ -2,6 +2,7 @@ package routes
 
 import (
 	. "backend/controllers"
+	. "backend/service"
 	. "backend/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -11,11 +12,17 @@ func InitRoutes(db *sqlx.DB, deviceChannel chan []PollerDevice, queryChannel cha
 
 	router := gin.Default()
 
-	credentialCtrl := NewCredentialController(db)
+	credentialService := NewCredentialService(db)
 
-	discoveryCtrl := NewDiscoveryController(db)
+	credentialCtrl := NewCredentialController(credentialService)
 
-	provisionCtrl := NewProvisionController(db, deviceChannel)
+	discoveryService := NewDiscoveryService(db)
+
+	discoveryCtrl := NewDiscoveryController(discoveryService)
+
+	provisionService := NewProvisionService(db, deviceChannel)
+
+	provisionCtrl := NewProvisionController(provisionService)
 
 	queryCtrl := NewQueryController(db, queryChannel)
 
@@ -27,6 +34,10 @@ func InitRoutes(db *sqlx.DB, deviceChannel chan []PollerDevice, queryChannel cha
 
 		{
 			credentials.POST("/", credentialCtrl.CreateCredential)
+
+			credentials.GET("/", credentialCtrl.GetCredentials)
+
+			credentials.PUT("/:id", credentialCtrl.UpdateCredential)
 		}
 
 		discoveries := v1.Group("/discoveries")
@@ -35,12 +46,18 @@ func InitRoutes(db *sqlx.DB, deviceChannel chan []PollerDevice, queryChannel cha
 			discoveries.POST("/", discoveryCtrl.CreateDiscovery)
 
 			discoveries.GET("/:id", discoveryCtrl.StartDiscovery)
+
+			discoveries.GET("/", discoveryCtrl.GetDiscoveries)
+
+			discoveries.PUT("/:id", discoveryCtrl.UpdateDiscovery)
 		}
 
 		provisions := v1.Group("/provisions")
 
 		{
 			provisions.POST("/", provisionCtrl.ProvisionDevice)
+
+			provisions.GET("/:id", provisionCtrl.GetProvisionedDevices)
 		}
 
 		query := v1.Group("/query")

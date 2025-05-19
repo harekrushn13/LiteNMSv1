@@ -2,18 +2,18 @@ package controllers
 
 import (
 	. "backend/models"
+	. "backend/service"
 	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
 	"net/http"
 )
 
 type CredentialController struct {
-	DB *sqlx.DB
+	Service *CredentialService
 }
 
-func NewCredentialController(db *sqlx.DB) *CredentialController {
+func NewCredentialController(service *CredentialService) *CredentialController {
 
-	return &CredentialController{DB: db}
+	return &CredentialController{Service: service}
 }
 
 func (controller *CredentialController) CreateCredential(context *gin.Context) {
@@ -27,11 +27,7 @@ func (controller *CredentialController) CreateCredential(context *gin.Context) {
 		return
 	}
 
-	query := `INSERT INTO credential_profile (username, password, port) VALUES ($1, $2, $3) RETURNING credential_id`
-
-	var credentialID uint16
-
-	err := controller.DB.QueryRow(query, credential.Username, credential.Password, credential.Port).Scan(&credentialID)
+	credentialID, err := controller.Service.CreateCredential(&credential)
 
 	if err != nil {
 
@@ -46,4 +42,43 @@ func (controller *CredentialController) CreateCredential(context *gin.Context) {
 
 		"message": "Credential created successfully",
 	})
+}
+
+func (controller *CredentialController) GetCredentials(context *gin.Context) {
+
+	credentials, err := controller.Service.GetCredentials()
+
+	if err != nil {
+
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	context.JSON(http.StatusOK, credentials)
+}
+
+func (controller *CredentialController) UpdateCredential(context *gin.Context) {
+
+	credentialID := context.Param("id")
+
+	var credential Credential
+
+	if err := context.ShouldBindJSON(&credential); err != nil {
+
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	err := controller.Service.UpdateCredential(credentialID, &credential)
+
+	if err != nil {
+
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+		return
+	}
+
+	context.JSON(http.StatusOK, gin.H{"message": "Credential updated successfully"})
 }

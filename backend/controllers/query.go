@@ -23,13 +23,13 @@ func NewQueryController(db *sqlx.DB, queryChannel chan QueryMap) *QueryControlle
 	}
 }
 
-func (qc *QueryController) FetchQuery(c *gin.Context) {
+func (controller *QueryController) FetchQuery(context *gin.Context) {
 
 	var request QueryRequest
 
-	if err := c.ShouldBindJSON(&request); err != nil {
+	if err := context.ShouldBindJSON(&request); err != nil {
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		context.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 
 		return
 	}
@@ -43,9 +43,9 @@ func (qc *QueryController) FetchQuery(c *gin.Context) {
 		Response: make(chan Response, 1),
 	}
 
-	qc.queryChannel <- queryMap
+	controller.queryChannel <- queryMap
 
 	response := <-queryMap.Response
 
-	c.JSON(http.StatusOK, response)
+	context.JSON(http.StatusOK, response)
 }
