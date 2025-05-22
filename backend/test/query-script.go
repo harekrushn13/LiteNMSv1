@@ -16,7 +16,7 @@ const (
 	apiURL          = "http://localhost:8080/lnms/query"
 	testFile        = "./test/test.json"
 	totalUsers      = 24
-	requestsPerUser = 30
+	requestsPerUser = 1
 )
 
 type RequestBody struct {
@@ -33,6 +33,8 @@ var (
 	totalDuration time.Duration
 	totalRequests int
 	mutex         sync.Mutex
+	maxDuration     time.Duration
+	maxRequestBody  RequestBody
 )
 
 func readTestJSON() ([]RequestBody, error) {
@@ -55,7 +57,6 @@ func readTestJSON() ([]RequestBody, error) {
 }
 
 func sendRequest(request RequestBody) {
-	start := time.Now()
 
 	reqBody, err := json.Marshal(request)
 	if err != nil {
@@ -71,6 +72,9 @@ func sendRequest(request RequestBody) {
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
+
+	start := time.Now()
+
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error sending request:", err)
@@ -89,13 +93,25 @@ func sendRequest(request RequestBody) {
 	mutex.Lock()
 	totalDuration += duration
 	totalRequests++
+	if duration > maxDuration {
+		maxDuration = duration
+		maxRequestBody = request
+	}
 	mutex.Unlock()
+
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, reqBody, "", "  "); err != nil {
+		log.Printf("User request (raw): %s", reqBody)
+	} else {
+		log.Printf("User request:\n%s", prettyJSON.String())
+	}
+	log.Printf("Response time: %v\n", duration)
 }
 
 func simulateUser(request RequestBody, userID int, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for i := 0; i < requestsPerUser; i++ {
-		log.Printf("User %d sending request %d", userID, i+1)
+		//log.Printf("User %d sending request %d", userID, i+1)
 		sendRequest(request)
 		time.Sleep(2 * time.Second)
 	}
@@ -117,9 +133,13 @@ func main() {
 	wg.Wait()
 
 	if totalRequests > 0 {
-		avgDuration := totalDuration / time.Duration(totalRequests)
-		fmt.Printf("Total Requests: %d\n", totalRequests)
-		fmt.Printf("Average Response Time: %v\n", avgDuration)
+		//avgDuration := totalDuration / time.Duration(totalRequests)
+		//fmt.Printf("Total Requests: %d\n", totalRequests)
+		//fmt.Printf("Average Response Time: %v\n", avgDuration)
+		//
+		//
+		//maxReqBody, _ := json.MarshalIndent(maxRequestBody, "", "  ")
+		//fmt.Printf("Request with Maximum Response Time:\n%s\n", maxReqBody)
 	} else {
 		fmt.Println("No requests were made.")
 	}

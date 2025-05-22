@@ -165,7 +165,7 @@ func (reader *Reader) fetchForObjectIDs(ctx context.Context, wg *sync.WaitGroup,
 
 				decodeData(result, dataType, &dp)
 
-				cache.SetWithTTL(cacheKey, dp, int64(len(dp)*96), 1*time.Hour)
+				cache.SetWithTTL(cacheKey, dp, 0, 1*time.Hour)
 
 				cache.Wait()
 

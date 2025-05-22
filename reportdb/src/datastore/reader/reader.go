@@ -12,7 +12,7 @@ import (
 type Reader struct {
 	id uint8
 
-	objectPool chan struct{} // to read multiple day in parallel for a query
+	objectPool chan struct{} // to read multiple key data in parallel for a query
 
 	queryEvents chan QueryReceive // channel to take query from query distributor
 

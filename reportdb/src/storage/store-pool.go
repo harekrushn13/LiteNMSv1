@@ -127,6 +127,8 @@ func (storePool *StorePool) flushAllEngines() {
 
 				Logger.Error("Failed to save index for engine", zap.String("path", engine.baseDir), zap.Error(err))
 			}
+
+			//engine.isUsedPut = false
 		}
 	}
 }

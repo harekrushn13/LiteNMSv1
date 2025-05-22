@@ -11,6 +11,7 @@
       <excludeFolder url="file://$MODULE_DIR$/poller/logs" />
       <excludeFolder url="file://$MODULE_DIR$/reportdb/src/logs" />
       <excludeFolder url="file://$MODULE_DIR$/reportdb/src/datastore/reader2" />
+      <excludeFolder url="file://$MODULE_DIR$/backend/test" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
