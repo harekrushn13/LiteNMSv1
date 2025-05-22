@@ -1,186 +1,178 @@
 [
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "AVG",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "SUM",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MAX",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MIN",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "AVG",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "SUM",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MAX",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MIN",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "AVG",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "AVG"
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "SUM",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "SUM"
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "MAX",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "MAX"
   },
   {
     "counter_id": 2,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "MIN",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "MIN"
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "AVG",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "SUM",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MAX",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MIN",
     "group_by_objects": true,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "AVG",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "SUM",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MAX",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
+    "from": 1744864200,
+    "to": 1747801800,
     "aggregation": "MIN",
     "group_by_objects": false,
     "interval": 86400
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "AVG",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "AVG"
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "SUM",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "SUM"
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "MAX",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "MAX"
   },
   {
     "counter_id": 1,
-    "from": 1744860600,
-    "to": 1746761400,
-    "aggregation": "MIN",
-    "group_by_objects": false
+    "from": 1744864200,
+    "to": 1747801800,
+    "aggregation": "MIN"
   }
 ]

@@ -8,6 +8,6 @@
   "queryBuffer": 20,
   "objectWorkers": 100,
   "fileGrowthSize": 4096,
-  "saveIndexInterval": 6,
+  "saveIndexInterval": 10,
   "queryTimeout": 10
 }
